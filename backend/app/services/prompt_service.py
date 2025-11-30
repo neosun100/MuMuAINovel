@@ -118,14 +118,16 @@ class PromptService:
 书名：{title}
 主题：{theme}
 类型：{genre}
+简介：{description}
 
 # 核心要求
+* **简介契合性**：世界观设定必须能够支撑简介中描述的故事情节和核心矛盾
 * **类型适配性**：世界观必须符合小说类型的特征，不要生成不匹配的设定
 * **主题贴合性**：时代背景要能有效支撑和体现小说主题
 * **原创性**：在类型框架内发挥创意，创造独特但合理的世界设定
 * **具象化**：避免空洞概念，用具体可感的细节描述世界
 * **逻辑自洽**：确保所有设定相互支撑，形成完整体系
-* **戏剧张力**：设定要能为故事冲突提供支撑
+* **戏剧张力**：设定要能为故事冲突提供支撑，尤其要为简介中的故事线索创造合适的环境
 
 # 类型指导原则
 根据小说类型选择适当的设定风格：
@@ -207,7 +209,12 @@ class PromptService:
 4. **无特殊符号**：文本中不使用引号、方括号等特殊符号包裹内容
 5. **丰富细节**：每个字段提供充实的原创内容，避免模板化表达
 
-请根据输入的类型和主题，生成**规模适当、风格匹配**的世界观设定。
+请根据输入的书名、类型、主题和简介，生成**规模适当、风格匹配、能够支撑故事发展**的世界观设定。
+
+**特别提醒**：
+- 简介是故事的核心概括，世界观必须为简介中描述的情节提供合理的发生背景
+- 所有设定都应该能够自然地承载简介中的故事线
+- 如果简介中有特定的场景、冲突或设定，世界观要与之呼应
 
 # JSON格式示例
 
@@ -1456,13 +1463,14 @@ class PromptService:
         )
     
     @classmethod
-    def get_world_building_prompt(cls, title: str, theme: str, genre: str = "") -> str:
+    def get_world_building_prompt(cls, title: str, theme: str, genre: str = "", description: str = "") -> str:
         """获取世界构建提示词"""
         return cls.format_prompt(
             cls.WORLD_BUILDING,
             title=title,
             theme=theme,
-            genre=genre or "通用类型"
+            genre=genre or "通用类型",
+            description=description or "暂无简介"
         )
     
     @classmethod
@@ -2118,7 +2126,7 @@ class PromptService:
                 "name": "世界构建",
                 "category": "世界构建",
                 "description": "用于生成小说世界观设定，包括时间背景、地理位置、氛围基调和世界规则",
-                "parameters": ["title", "theme", "genre"]
+                "parameters": ["title", "theme", "genre", "description"]
             },
             "CHARACTERS_BATCH_GENERATION": {
                 "name": "批量角色生成",
