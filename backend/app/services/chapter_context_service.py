@@ -56,6 +56,7 @@ class ChapterContext:
     story_skeleton: Optional[str] = None      # 故事骨架（50章+启用）
     mcp_references: Optional[str] = None      # MCP参考资料
     foreshadow_context: Optional[str] = None  # 伏笔上下文（待回收/需埋设）
+    style_guide: Optional[str] = None         # 风格指南（从已有章节学习）
     
     # === 元信息 ===
     context_stats: Dict[str, Any] = field(default_factory=dict)  # 统计信息
@@ -64,7 +65,7 @@ class ChapterContext:
         """计算总上下文长度"""
         total = 0
         for field_name in ['chapter_outline', 'continuation_point', 'chapter_characters',
-                          'relevant_memories', 'story_skeleton', 'style_instruction', 'foreshadow_context']:
+                          'relevant_memories', 'story_skeleton', 'style_instruction', 'foreshadow_context', 'style_guide']:
             value = getattr(self, field_name, None)
             if value:
                 total += len(value)
@@ -209,6 +210,12 @@ class ChapterContextBuilder:
         if context.foreshadow_context:
             logger.info(f"  ✅ 伏笔上下文: {len(context.foreshadow_context)}字符")
         
+        # === 风格指南（章节数 >= 3 时启用）===
+        if chapter_number >= 3:
+            context.style_guide = await self._build_style_guide(project, db)
+            if context.style_guide:
+                logger.info(f"  ✅ 风格指南: {len(context.style_guide)}字符")
+        
         # === 统计信息 ===
         context.context_stats = {
             "chapter_number": chapter_number,
@@ -218,6 +225,7 @@ class ChapterContextBuilder:
             "memories_length": len(context.relevant_memories or ""),
             "skeleton_length": len(context.story_skeleton or ""),
             "foreshadow_length": len(context.foreshadow_context or ""),
+            "style_guide_length": len(context.style_guide or ""),
             "total_length": context.get_total_context_length()
         }
         
@@ -691,6 +699,70 @@ class ChapterContextBuilder:
             
         except Exception as e:
             logger.error(f"❌ 构建伏笔上下文失败: {str(e)}")
+            return None
+
+    async def _build_style_guide(
+        self,
+        project: Project,
+        db: AsyncSession
+    ) -> Optional[str]:
+        """
+        构建风格指南（从已有章节学习）
+        
+        当项目有 3+ 已完成章节时，生成简洁的风格指南
+        """
+        try:
+            from app.services.style_analyzer import StyleAnalyzer
+            
+            # 获取已完成章节
+            result = await db.execute(
+                select(Chapter).where(
+                    Chapter.project_id == project.id,
+                    Chapter.content != None,
+                    Chapter.content != ""
+                ).order_by(Chapter.chapter_number).limit(3)
+            )
+            chapters = result.scalars().all()
+            
+            if len(chapters) < 2:
+                return None
+            
+            # 使用 StyleAnalyzer 生成风格指南
+            analyzer = StyleAnalyzer()
+            
+            # 收集基础指标
+            metrics_list = []
+            for ch in chapters:
+                m = analyzer.analyze_basic_metrics(ch.content)
+                metrics_list.append(m)
+            
+            # 计算平均值
+            avg_sentence = sum(m.get("avg_sentence_length", 0) for m in metrics_list) / len(metrics_list)
+            avg_dialogue = sum(m.get("dialogue_ratio", 0) for m in metrics_list) / len(metrics_list)
+            
+            # 生成简洁的风格指南
+            guide_lines = ["【写作风格参考】"]
+            
+            if avg_sentence < 20:
+                guide_lines.append("- 句式：短句为主，节奏明快")
+            elif avg_sentence > 35:
+                guide_lines.append("- 句式：长句为主，描写细腻")
+            else:
+                guide_lines.append("- 句式：长短结合，张弛有度")
+            
+            if avg_dialogue > 30:
+                guide_lines.append("- 对话：对话丰富，注重人物互动")
+            elif avg_dialogue < 10:
+                guide_lines.append("- 对话：以叙述为主，对话精简")
+            else:
+                guide_lines.append("- 对话：叙述与对话均衡")
+            
+            guide_lines.append(f"- 参考数据：平均句长{avg_sentence:.0f}字，对话占比{avg_dialogue:.0f}%")
+            
+            return "\n".join(guide_lines)
+            
+        except Exception as e:
+            logger.error(f"❌ 构建风格指南失败: {str(e)}")
             return None
 
 

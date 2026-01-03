@@ -1478,7 +1478,8 @@ async def generate_chapter_content_stream(
                         # P2 参考参数（动态裁剪后的）
                         story_skeleton=chapter_context.story_skeleton or '',
                         relevant_memories=chapter_context.relevant_memories or '',
-                        foreshadow_context=chapter_context.foreshadow_context or ''
+                        foreshadow_context=chapter_context.foreshadow_context or '',
+                        style_guide=chapter_context.style_guide or ''
                     )
                 else:
                     # 第一章，使用无前置内容模板
@@ -1495,7 +1496,8 @@ async def generate_chapter_content_stream(
                         genre=project.genre or '未设定',
                         narrative_perspective=chapter_perspective,
                         characters_info=characters_info or '暂无角色信息',
-                        foreshadow_context=chapter_context.foreshadow_context or ''
+                        foreshadow_context=chapter_context.foreshadow_context or '',
+                        style_guide=chapter_context.style_guide or ''
                     )
                 
                 # 添加 MCP 参考资料（如果有）
@@ -2775,7 +2777,8 @@ async def generate_single_chapter_for_batch(
             # P2 参考参数（动态裁剪后的）
             story_skeleton=chapter_context.story_skeleton or '',
             relevant_memories=chapter_context.relevant_memories or '',
-            foreshadow_context=chapter_context.foreshadow_context or ''
+            foreshadow_context=chapter_context.foreshadow_context or '',
+            style_guide=chapter_context.style_guide or ''
         )
     else:
         # 第一章，使用无前置内容模板
@@ -2792,7 +2795,8 @@ async def generate_single_chapter_for_batch(
             genre=project.genre or '未设定',
             narrative_perspective=project.narrative_perspective or '第三人称',
             characters_info=characters_info or '暂无角色信息',
-            foreshadow_context=chapter_context.foreshadow_context or ''
+            foreshadow_context=chapter_context.foreshadow_context or '',
+            style_guide=chapter_context.style_guide or ''
         )
     
     # 应用写作风格

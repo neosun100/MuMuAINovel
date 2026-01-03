@@ -521,6 +521,10 @@ class PromptService:
 {foreshadow_context}
 </foreshadow>
 
+<style_guide priority="P2">
+{style_guide}
+</style_guide>
+
 <constraints>
 【必须遵守】
 ✅ 严格按照大纲推进情节
@@ -588,6 +592,10 @@ class PromptService:
 【伏笔提示 - 重要】
 {foreshadow_context}
 </foreshadow>
+
+<style_guide priority="P2">
+{style_guide}
+</style_guide>
 
 <constraints>
 【必须遵守】
