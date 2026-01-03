@@ -516,6 +516,11 @@ class PromptService:
 {characters_info}
 </characters>
 
+<foreshadow priority="P1">
+【伏笔提示 - 重要】
+{foreshadow_context}
+</foreshadow>
+
 <constraints>
 【必须遵守】
 ✅ 严格按照大纲推进情节
@@ -578,6 +583,11 @@ class PromptService:
 【故事骨架 - 背景】
 {story_skeleton}
 </skeleton>
+
+<foreshadow priority="P1">
+【伏笔提示 - 重要】
+{foreshadow_context}
+</foreshadow>
 
 <constraints>
 【必须遵守】

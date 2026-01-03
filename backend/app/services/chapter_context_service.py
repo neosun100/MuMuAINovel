@@ -12,6 +12,7 @@ from app.models.outline import Outline
 from app.models.character import Character
 from app.models.career import Career, CharacterCareer
 from app.models.memory import StoryMemory
+from app.models.foreshadow import Foreshadow, ForeshadowStatus
 from app.logger import get_logger
 
 logger = get_logger(__name__)
@@ -54,6 +55,7 @@ class ChapterContext:
     relevant_memories: Optional[str] = None   # 相关记忆（精简版）
     story_skeleton: Optional[str] = None      # 故事骨架（50章+启用）
     mcp_references: Optional[str] = None      # MCP参考资料
+    foreshadow_context: Optional[str] = None  # 伏笔上下文（待回收/需埋设）
     
     # === 元信息 ===
     context_stats: Dict[str, Any] = field(default_factory=dict)  # 统计信息
@@ -62,7 +64,7 @@ class ChapterContext:
         """计算总上下文长度"""
         total = 0
         for field_name in ['chapter_outline', 'continuation_point', 'chapter_characters',
-                          'relevant_memories', 'story_skeleton', 'style_instruction']:
+                          'relevant_memories', 'story_skeleton', 'style_instruction', 'foreshadow_context']:
             value = getattr(self, field_name, None)
             if value:
                 total += len(value)
@@ -200,6 +202,13 @@ class ChapterContextBuilder:
             )
             logger.info(f"  ✅ 故事骨架: {len(context.story_skeleton or '')}字符")
         
+        # === 伏笔上下文（始终构建）===
+        context.foreshadow_context = await self._build_foreshadow_context(
+            project.id, chapter_number, db
+        )
+        if context.foreshadow_context:
+            logger.info(f"  ✅ 伏笔上下文: {len(context.foreshadow_context)}字符")
+        
         # === 统计信息 ===
         context.context_stats = {
             "chapter_number": chapter_number,
@@ -208,6 +217,7 @@ class ChapterContextBuilder:
             "characters_length": len(context.chapter_characters),
             "memories_length": len(context.relevant_memories or ""),
             "skeleton_length": len(context.story_skeleton or ""),
+            "foreshadow_length": len(context.foreshadow_context or ""),
             "total_length": context.get_total_context_length()
         }
         
@@ -743,3 +753,77 @@ class FocusedMemoryRetriever:
                 current_length += len(text)
         
         return "\n".join(lines) if lines else ""
+
+
+    async def _build_foreshadow_context(
+        self,
+        project_id: str,
+        chapter_number: int,
+        db: AsyncSession
+    ) -> Optional[str]:
+        """
+        构建伏笔上下文（从数据库直接查询）
+        
+        包含：
+        1. 即将需要回收的伏笔（提醒）
+        2. 当前活跃的伏笔（可以暗示）
+        
+        Args:
+            project_id: 项目ID
+            chapter_number: 当前章节号
+            db: 数据库会话
+        
+        Returns:
+            格式化的伏笔上下文
+        """
+        try:
+            # 查询未回收的伏笔
+            result = await db.execute(
+                select(Foreshadow).where(
+                    Foreshadow.project_id == project_id,
+                    Foreshadow.status.in_([
+                        ForeshadowStatus.PLANTED.value,
+                        ForeshadowStatus.HINTED.value
+                    ])
+                ).order_by(Foreshadow.importance.desc())
+            )
+            foreshadows = result.scalars().all()
+            
+            if not foreshadows:
+                return None
+            
+            lines = []
+            urgent = []  # 紧急需要回收
+            active = []  # 活跃可暗示
+            
+            for f in foreshadows:
+                # 计算距离预期回收章节的距离
+                if f.resolved_chapter_number:
+                    remaining = f.resolved_chapter_number - chapter_number
+                    if remaining <= f.remind_before_chapters and remaining >= 0:
+                        urgent.append(f)
+                    elif remaining > 0:
+                        active.append(f)
+                else:
+                    active.append(f)
+            
+            # 构建紧急伏笔提醒
+            if urgent:
+                lines.append("【⚠️ 即将回收的伏笔】")
+                for f in urgent[:3]:  # 最多3条
+                    remaining = f.resolved_chapter_number - chapter_number
+                    lines.append(
+                        f"- 【{f.title}】(剩余{remaining}章): {f.description[:80]}..."
+                    )
+            
+            # 构建活跃伏笔（可暗示）
+            if active and len(lines) < 200:
+                lines.append("【📌 活跃伏笔（可适当暗示）】")
+                for f in active[:5]:  # 最多5条
+                    lines.append(f"- 【{f.title}】: {f.description[:50]}...")
+            
+            return "\n".join(lines) if lines else None
+            
+        except Exception as e:
+            logger.error(f"❌ 构建伏笔上下文失败: {str(e)}")
+            return None

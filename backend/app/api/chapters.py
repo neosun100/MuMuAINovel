@@ -1477,7 +1477,8 @@ async def generate_chapter_content_stream(
                         characters_info=characters_info or '暂无角色信息',
                         # P2 参考参数（动态裁剪后的）
                         story_skeleton=chapter_context.story_skeleton or '',
-                        relevant_memories=chapter_context.relevant_memories or ''
+                        relevant_memories=chapter_context.relevant_memories or '',
+                        foreshadow_context=chapter_context.foreshadow_context or ''
                     )
                 else:
                     # 第一章，使用无前置内容模板
@@ -1493,7 +1494,8 @@ async def generate_chapter_content_stream(
                         # P1 重要参数
                         genre=project.genre or '未设定',
                         narrative_perspective=chapter_perspective,
-                        characters_info=characters_info or '暂无角色信息'
+                        characters_info=characters_info or '暂无角色信息',
+                        foreshadow_context=chapter_context.foreshadow_context or ''
                     )
                 
                 # 添加 MCP 参考资料（如果有）
@@ -2772,7 +2774,8 @@ async def generate_single_chapter_for_batch(
             characters_info=characters_info or '暂无角色信息',
             # P2 参考参数（动态裁剪后的）
             story_skeleton=chapter_context.story_skeleton or '',
-            relevant_memories=chapter_context.relevant_memories or ''
+            relevant_memories=chapter_context.relevant_memories or '',
+            foreshadow_context=chapter_context.foreshadow_context or ''
         )
     else:
         # 第一章，使用无前置内容模板
@@ -2788,7 +2791,8 @@ async def generate_single_chapter_for_batch(
             # P1 重要参数
             genre=project.genre or '未设定',
             narrative_perspective=project.narrative_perspective or '第三人称',
-            characters_info=characters_info or '暂无角色信息'
+            characters_info=characters_info or '暂无角色信息',
+            foreshadow_context=chapter_context.foreshadow_context or ''
         )
     
     # 应用写作风格
