@@ -17,6 +17,7 @@ from app.models.regeneration_task import RegenerationTask
 from app.models.career import Career, CharacterCareer
 from app.models.prompt_template import PromptTemplate
 from app.models.foreshadow import Foreshadow, ForeshadowStatus, ForeshadowType
+from app.models.timeline import TimelineEvent
 
 __all__ = [
     "Project",
