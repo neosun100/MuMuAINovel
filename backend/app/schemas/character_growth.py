@@ -45,6 +45,28 @@ class CharacterGrowthResponse(BaseModel):
     
     class Config:
         from_attributes = True
+    
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        """自定义验证，处理 UUID 转换"""
+        if hasattr(obj, '__dict__'):
+            data = {
+                'id': str(obj.id),
+                'character_id': str(obj.character_id),
+                'project_id': str(obj.project_id),
+                'chapter_id': str(obj.chapter_id) if obj.chapter_id else None,
+                'chapter_number': obj.chapter_number,
+                'growth_type': obj.growth_type,
+                'title': obj.title,
+                'description': obj.description,
+                'before_state': obj.before_state,
+                'after_state': obj.after_state,
+                'extra_data': obj.extra_data,
+                'created_at': obj.created_at,
+                'updated_at': obj.updated_at
+            }
+            return cls(**data)
+        return super().model_validate(obj, **kwargs)
 
 
 class CharacterGrowthTimeline(BaseModel):

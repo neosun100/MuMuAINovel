@@ -18,7 +18,7 @@ from app.schemas.character_growth import (
 router = APIRouter(prefix="/api/character-growth", tags=["角色成长"])
 
 
-@router.post("", response_model=CharacterGrowthResponse)
+@router.post("")
 async def create_growth_record(
     data: CharacterGrowthCreate,
     db: AsyncSession = Depends(get_db),
@@ -29,10 +29,10 @@ async def create_growth_record(
     db.add(record)
     await db.commit()
     await db.refresh(record)
-    return record
+    return CharacterGrowthResponse.model_validate(record)
 
 
-@router.get("/character/{character_id}", response_model=CharacterGrowthTimeline)
+@router.get("/character/{character_id}")
 async def get_character_growth_timeline(
     character_id: str,
     growth_type: Optional[str] = Query(None, description="筛选成长类型"),
@@ -63,7 +63,7 @@ async def get_character_growth_timeline(
         character_id=character_id,
         character_name=character.name,
         total_records=len(records),
-        growth_records=records
+        growth_records=[CharacterGrowthResponse.model_validate(r) for r in records]
     )
 
 
@@ -97,7 +97,7 @@ async def get_project_growth_summary(
     }
 
 
-@router.get("/{record_id}", response_model=CharacterGrowthResponse)
+@router.get("/{record_id}")
 async def get_growth_record(
     record_id: str,
     db: AsyncSession = Depends(get_db),
@@ -110,10 +110,10 @@ async def get_growth_record(
     record = result.scalar_one_or_none()
     if not record:
         raise HTTPException(status_code=404, detail="记录不存在")
-    return record
+    return CharacterGrowthResponse.model_validate(record)
 
 
-@router.put("/{record_id}", response_model=CharacterGrowthResponse)
+@router.put("/{record_id}")
 async def update_growth_record(
     record_id: str,
     data: CharacterGrowthUpdate,
@@ -133,7 +133,7 @@ async def update_growth_record(
     
     await db.commit()
     await db.refresh(record)
-    return record
+    return CharacterGrowthResponse.model_validate(record)
 
 
 @router.delete("/{record_id}")
