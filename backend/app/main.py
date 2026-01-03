@@ -128,7 +128,7 @@ from app.api import (
     auth, users, settings, writing_styles, memories,
     mcp_plugins, admin, inspiration, prompt_templates,
     changelog, careers, foreshadows, consistency, timeline,
-    style_analysis, quality, duplicate
+    style_analysis, quality, duplicate, character_growth
 )
 
 app.include_router(auth.router, prefix="/api")
@@ -155,6 +155,7 @@ app.include_router(timeline.router, prefix="/api")  # 时间线管理API
 app.include_router(style_analysis.router, prefix="/api")  # 风格分析API
 app.include_router(quality.router)  # 质量评分API
 app.include_router(duplicate.router)  # 重复检测API
+app.include_router(character_growth.router)  # 角色成长API
 app.include_router(changelog.router, prefix="/api")  # 更新日志API
 
 static_dir = Path(__file__).parent.parent / "static"
