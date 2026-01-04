@@ -1,8 +1,12 @@
-# MuMuAI小说系统 - 快速启动指南
+# MuMuAINovel 快速启动指南
 
-## 🚀 新对话启动命令
+> **这是入口文档**，AI助手（Kiro/Claude）请先阅读此文档了解项目全貌。
 
-每次新对话开始时，请告诉Kiro：
+---
+
+## 🚀 新对话启动
+
+每次新对话开始时，请告诉AI助手：
 
 ```
 请阅读 /home/neo/upload/MuMuAINovel/docs/QUICKSTART.md 了解项目背景和操作流程。
@@ -12,14 +16,79 @@
 
 ## 📚 项目概述
 
-**MuMuAINovel** 是一个AI驱动的小说创作系统，支持：
-- 自动生成世界观、角色、大纲
-- 批量生成100章×10000字的长篇小说
-- RTCO上下文框架确保章节连贯
-- 三段论生成策略（40%+40%+20%）
+**MuMuAINovel** 是一个AI驱动的小说创作系统，核心能力：
 
-**系统地址**: http://localhost:8000
-**登录账号**: 在 .env 中配置 LOCAL_AUTH_USERNAME / LOCAL_AUTH_PASSWORD
+| 能力 | 说明 |
+|------|------|
+| 🤖 多AI支持 | OpenAI / Gemini / Claude |
+| 📖 批量生成 | 100章 × 10000字 = 100万字 |
+| 🎭 角色管理 | 支持80-150个角色 |
+| 🔮 高级功能 | 伏笔、一致性、质量评分、风格分析 |
+| 🔌 MCP集成 | 33个工具，AI助手可直接调用 |
+
+**系统地址**: http://localhost:8000  
+**API文档**: http://localhost:8000/docs (Swagger) | http://localhost:8000/redoc (ReDoc)
+
+---
+
+## 📂 文档导航
+
+| 文档 | 说明 | 何时阅读 |
+|------|------|----------|
+| **QUICKSTART.md** | 本文档，入口指南 | 🔴 必读 |
+| **KIRO_INTERACTION_GUIDE.md** | 完整API交互指南 | 需要了解API细节时 |
+| **API_MCP_COVERAGE.md** | API和MCP覆盖清单 | 需要查看功能覆盖时 |
+| **MCP_USAGE_GUIDE.md** | MCP Server使用指南 | 配置MCP时 |
+| **NOVEL_CREATION_PIPELINE.md** | 创作流水线详解 | 需要了解完整流程时 |
+
+---
+
+## 🎯 交互模式
+
+### 模式1: 创建新小说
+
+**用户说:**
+```
+帮我创作一部小说：
+- 标题：《xxx》
+- 类型：都市科幻/玄幻/历史穿越/...
+- 主角：名字、职业、性格
+- 背景：时代、地点、核心冲突
+- 方向：开篇→发展→高潮→结局
+- 特殊要求：真实人物、神秘元素等
+```
+
+**AI执行流程:**
+1. 搜索背景资料 (web_search)
+2. 设计角色 (80-150个)
+3. 设计大纲 (100章)
+4. 调用 `novel_full_pipeline` 或分步API
+5. 报告Project ID和进度
+
+### 模式2: 检查进度
+
+**用户说:**
+```
+检查盗火者的悲歌的进度
+```
+
+**AI执行:**
+```
+调用 novel_check_progress 或 curl API
+```
+
+### 模式3: 恢复任务
+
+**用户说:**
+```
+恢复所有中断的任务
+```
+
+**AI执行:**
+```bash
+python auto_resume.py --daemon
+# 或调用 novel_resume_all
+```
 
 ---
 
@@ -38,169 +107,190 @@
 
 ---
 
-## 📂 关键文档
+## 🔌 MCP 工具速查
 
-| 文档 | 说明 |
-|------|------|
-| `/docs/QUICKSTART.md` | 本文档，快速启动指南 |
-| `/docs/KIRO_INTERACTION_GUIDE.md` | **完整交互指南（API详解）** |
-| `/docs/NOVEL_CREATION_PIPELINE.md` | 详细API流程 |
-| `/docs/KIRO_NOVEL_AGENT.md` | Kiro Agent工作流 |
-| `/novel_pipeline.py` | 自动化Pipeline脚本 |
-| `/auto_resume.py` | 自动恢复脚本 |
-
----
-
-## 🎯 用户交互模板
-
-### 创建新小说
-
+### 一键创建
 ```
-帮我创作一部小说：
-- 标题：《xxx》
-- 类型：都市科幻/玄幻/历史穿越/...
-- 主角：名字、职业、性格
-- 背景：时代、地点、核心冲突
-- 方向：开篇→发展→高潮→结局
-- 特殊要求：真实人物、神秘元素等
+novel_full_pipeline - 一键创建完整小说
 ```
 
-### 检查项目进度
-
+### 项目管理
 ```
-检查项目 PROJECT_ID 的生成进度
-```
-
-### 继续中断的任务
-
-```
-继续生成项目 PROJECT_ID 的剩余章节
+novel_list_projects    - 列出项目
+novel_create_project   - 创建项目
+novel_delete_project   - 删除项目
+novel_export_project   - 导出项目
 ```
 
----
+### 内容管理
+```
+novel_create_characters_batch  - 批量创建角色
+novel_create_outlines_batch    - 批量创建大纲
+novel_create_chapters_from_outlines - 从大纲创建章节
+```
 
-## 📊 当前项目状态
+### 生成控制
+```
+novel_batch_generate     - 提交批量生成
+novel_check_progress     - 检查进度
+novel_cancel_generation  - 取消任务
+novel_resume_all         - 恢复所有任务
+```
 
-### 盗火者的悲歌
-- **Project ID**: `43a8d273-437a-4167-a67d-df53fadd5997`
-- **类型**: 都市科幻
-- **主角**: Leo Sun (AWS架构师，香港，Web3行业)
-- **角色**: 135个
-- **大纲**: 100章
-- **状态**: 🟢 生成中
-
-### 崇祯大帝（终极版）
-- **Project ID**: `7cf21fed-567b-4f48-b0ee-f9458c02a8d7`
-- **类型**: 历史穿越
-- **状态**: 🟢 生成中 (45/100章)
-
-### 龙霸星河
-- **Project ID**: `61ee2c8d-b445-4406-bfaa-8527cdc6a97b`
-- **类型**: 星际科幻
-- **状态**: 🟢 生成中 (20/100章)
+### 质量检测
+```
+novel_check_quality      - 质量评分
+novel_check_consistency  - 一致性检测
+novel_check_duplicate    - 重复检测
+```
 
 ---
 
 ## ⚡ 快速命令
 
+### 环境变量
 ```bash
-# 检查所有项目进度
-curl -s -b /tmp/cookies.txt "http://localhost:8000/api/projects" | jq '.items[] | {title, id}'
+export MUMUAI_BASE_URL=http://localhost:8000
+export MUMUAI_USERNAME=admin
+export MUMUAI_PASSWORD=your_password
+```
 
-# 检查特定项目章节进度
-curl -s -b /tmp/cookies.txt "http://localhost:8000/api/chapters/project/{PROJECT_ID}?limit=200" | \
+### 登录获取Cookie
+```bash
+curl -c /tmp/cookies.txt -X POST "$MUMUAI_BASE_URL/api/auth/local/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "your_password"}'
+```
+
+### 查看所有项目
+```bash
+curl -s -b /tmp/cookies.txt "$MUMUAI_BASE_URL/api/projects" | jq '.items[] | {id, title}'
+```
+
+### 检查项目进度
+```bash
+curl -s -b /tmp/cookies.txt "$MUMUAI_BASE_URL/api/chapters/project/{PROJECT_ID}?limit=200" | \
   jq '{total: .total, generated: [.items[] | select(.content | length > 100)] | length}'
+```
 
-# 提交批量生成
-curl -s -b /tmp/cookies.txt -X POST "http://localhost:8000/api/chapters/project/{PROJECT_ID}/batch-generate" \
+### 提交批量生成
+```bash
+curl -s -b /tmp/cookies.txt -X POST "$MUMUAI_BASE_URL/api/chapters/project/{PROJECT_ID}/batch-generate" \
   -H "Content-Type: application/json" \
   -d '{"start_chapter_number": 1, "count": 100, "target_word_count": 10000}'
 ```
 
----
-
-## 🔧 系统配置
-
-### Schema修改记录
-- `/backend/app/schemas/chapter.py` 第88行: `count` 上限从20改为100
-- `/backend/app/schemas/chapter.py` 第91行: `target_word_count` 默认改为10000，上限改为20000
-
-### 重启服务
+### 恢复中断任务
 ```bash
-cd /home/neo/upload/MuMuAINovel
-docker-compose restart mumuainovel
+python auto_resume.py --daemon
 ```
-
----
-
-## 📝 Kiro执行清单
-
-当用户要求创建新小说时，Kiro应：
-
-1. **搜索背景资料** - 使用web_search获取相关信息
-2. **创建项目** - POST /api/projects
-3. **设置世界观** - PUT /api/projects/{id}
-4. **设计并创建角色** - POST /api/characters (80-150个)
-5. **设计并创建大纲** - POST /api/outlines (100章)
-6. **创建章节** - POST /api/chapters (100个)
-7. **提交批量生成** - POST /api/chapters/project/{id}/batch-generate
-8. **报告状态** - 返回Project ID和Batch ID
 
 ---
 
 ## 🔄 任务恢复机制
 
-### 自动恢复（推荐）
-
-Container重启后，运行自动恢复脚本：
-
+### Container重启后
 ```bash
-# 一次性恢复所有中断任务
+# 自动恢复所有中断任务
 python auto_resume.py
 
-# 后台持续监控模式（直到全部完成）
+# 后台持续监控直到完成
 python auto_resume.py --daemon
+
+# 后台运行并记录日志
+nohup python auto_resume.py --daemon > resume.log 2>&1 &
 ```
 
-### 手动恢复
+### 重试策略
+| 重试次数 | 等待时间 | 说明 |
+|----------|----------|------|
+| 1-3 | 2, 4, 8秒 | 快速重试 |
+| 4-6 | 30秒 | 中等等待 |
+| 7-10 | 60秒 | 长等待 |
 
+---
+
+## 📊 当前项目状态
+
+> 以下为示例，实际状态请通过API查询
+
+| 项目 | 进度 | 状态 |
+|------|------|------|
+| 盗火者的悲歌 | 11/100章 | 🟢 生成中 |
+| 龙霸星河 | 43/100章 | 🟢 生成中 |
+| 崇祯大帝 | 70/100章 | 🟢 生成中 |
+
+查询命令:
 ```bash
-# 1. 检查项目进度
-curl -s -b /tmp/cookies.txt "http://localhost:8000/api/chapters/project/{PROJECT_ID}?limit=200" | \
-  jq '{generated: [.items[] | select(.content | length > 100)] | length, total: .total}'
-
-# 2. 从断点继续（假设已生成45章，共100章）
-curl -s -b /tmp/cookies.txt -X POST "http://localhost:8000/api/chapters/project/{PROJECT_ID}/batch-generate" \
-  -H "Content-Type: application/json" \
-  -d '{"start_chapter_number": 46, "count": 55, "target_word_count": 10000}'
+python auto_resume.py  # 会显示所有项目状态
 ```
-
-### 系统启动时自动检测
-
-系统启动时会自动：
-1. 检测所有 `running` 状态的任务
-2. 标记为 `interrupted`
-3. 记录已完成章节数
-4. 日志输出恢复建议
 
 ---
 
 ## ❓ 常见问题
 
+**Q: 如何创建新小说？**
+A: 告诉AI助手标题、类型、主角、背景、方向，AI会自动完成全部流程。
+
 **Q: Container重启后任务会继续吗？**
-A: 不会自动继续，但数据不会丢失。运行 `python auto_resume.py` 恢复。
-
-**Q: 大纲生成API被阻塞怎么办？**
-A: 直接用 `POST /api/outlines` 手动创建，绕过SSE流式接口。
-
-**Q: 批量生成中断怎么办？**
-A: 运行 `python auto_resume.py` 自动恢复，或手动查询进度后重新提交。
+A: 不会自动继续，运行 `python auto_resume.py` 恢复。
 
 **Q: 如何查看生成日志？**
 A: `docker logs mumuainovel --tail 100`
 
-**Q: 如何后台持续监控直到完成？**
-A: `nohup python auto_resume.py --daemon > resume.log 2>&1 &`
+**Q: 批量生成中断怎么办？**
+A: 运行 `python auto_resume.py --daemon` 自动恢复。
+
+**Q: 如何取消正在进行的任务？**
+A: 调用 `novel_cancel_generation` 或 API `/api/chapters/batch-generate/{batch_id}/cancel`
+
+**Q: 如何检测章节质量？**
+A: 调用 `novel_check_quality`、`novel_check_consistency`、`novel_check_duplicate`
+
+---
+
+## 🔧 系统配置
+
+### 关键参数
+| 参数 | 默认值 | 范围 | 说明 |
+|------|--------|------|------|
+| count | 10 | 1-100 | 批量生成章节数 |
+| target_word_count | 10000 | 1000-20000 | 每章字数 |
+| max_retries | 10 | 0-20 | 最大重试次数 |
+
+### 配置文件
+- `.env` - 环境变量配置
+- `.env.example` - 配置模板
+
+---
+
+## 📁 项目结构
+
+```
+MuMuAINovel/
+├── docs/                          # 文档目录
+│   ├── QUICKSTART.md              # 入口文档（本文档）
+│   ├── KIRO_INTERACTION_GUIDE.md  # 完整API指南
+│   ├── API_MCP_COVERAGE.md        # API/MCP覆盖清单
+│   ├── MCP_USAGE_GUIDE.md         # MCP使用指南
+│   └── NOVEL_CREATION_PIPELINE.md # 创作流水线
+├── mcp_novel_server.py            # MCP Server (33个工具)
+├── auto_resume.py                 # 自动恢复脚本
+├── novel_pipeline.py              # Python自动化脚本
+├── backend/                       # 后端代码
+├── frontend/                      # 前端代码
+├── docker-compose.yml             # Docker配置
+└── README.md                      # 项目说明
+```
+
+---
+
+## 🎓 AI助手学习路径
+
+1. **阅读本文档** - 了解项目全貌和交互模式
+2. **查看 API_MCP_COVERAGE.md** - 了解可用的工具和API
+3. **参考 KIRO_INTERACTION_GUIDE.md** - 需要API细节时查阅
+4. **实践** - 尝试创建小说或检查进度
 
 ---
 

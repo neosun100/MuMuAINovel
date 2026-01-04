@@ -64,25 +64,67 @@ export MUMUAI_PASSWORD=your_password
 }
 ```
 
-## 可用工具
+## 可用工具 (33个)
 
+### 项目管理 (6个)
 | 工具名 | 说明 |
 |--------|------|
 | `novel_list_projects` | 列出所有小说项目 |
 | `novel_get_project` | 获取项目详情 |
 | `novel_create_project` | 创建新项目 |
 | `novel_set_worldview` | 设置世界观 |
+| `novel_delete_project` | 删除项目 |
+| `novel_export_project` | 导出项目 |
+
+### 角色管理 (5个)
+| 工具名 | 说明 |
+|--------|------|
+| `novel_list_characters` | 获取角色列表 |
 | `novel_create_character` | 创建单个角色 |
 | `novel_create_characters_batch` | 批量创建角色 |
-| `novel_list_characters` | 获取角色列表 |
+| `novel_update_character` | 更新角色 |
+| `novel_delete_character` | 删除角色 |
+
+### 大纲管理 (5个)
+| 工具名 | 说明 |
+|--------|------|
+| `novel_list_outlines` | 获取大纲列表 |
 | `novel_create_outline` | 创建单个大纲 |
 | `novel_create_outlines_batch` | 批量创建大纲 |
-| `novel_list_outlines` | 获取大纲列表 |
+| `novel_update_outline` | 更新大纲 |
+| `novel_delete_outline` | 删除大纲 |
+
+### 章节管理 (5个)
+| 工具名 | 说明 |
+|--------|------|
+| `novel_list_chapters` | 获取章节列表 |
+| `novel_get_chapter` | 获取章节内容 |
 | `novel_create_chapters_from_outlines` | 从大纲创建章节 |
+| `novel_update_chapter` | 更新章节 |
+| `novel_delete_chapter` | 删除章节 |
+
+### 批量生成 (4个)
+| 工具名 | 说明 |
+|--------|------|
 | `novel_batch_generate` | 提交批量生成任务 |
 | `novel_check_progress` | 检查生成进度 |
+| `novel_cancel_generation` | 取消生成任务 |
 | `novel_resume_all` | 恢复所有中断任务 |
-| `novel_get_chapter` | 获取章节内容 |
+
+### 高级功能 (7个)
+| 工具名 | 说明 |
+|--------|------|
+| `novel_check_quality` | 章节质量评分 |
+| `novel_check_consistency` | 一致性检测 |
+| `novel_check_duplicate` | 重复内容检测 |
+| `novel_list_foreshadows` | 获取伏笔列表 |
+| `novel_create_foreshadow` | 创建伏笔 |
+| `novel_get_timeline` | 获取时间线 |
+| `novel_analyze_style` | 风格分析 |
+
+### 一键Pipeline (1个)
+| 工具名 | 说明 |
+|--------|------|
 | `novel_full_pipeline` | 一键创建完整小说 |
 
 ## 使用示例
