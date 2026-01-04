@@ -1,7 +1,7 @@
 """添加伏笔管理表
 
 Revision ID: 20260103_foreshadow
-Revises: 
+Revises: a7e4408e1d5b
 Create Date: 2026-01-03
 """
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = '20260103_foreshadow'
-down_revision = None
+down_revision = 'a7e4408e1d5b'
 branch_labels = None
 depends_on = None
 

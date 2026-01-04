@@ -53,10 +53,12 @@ class ChapterContext:
     
     # === P2-参考信息（条件触发）===
     relevant_memories: Optional[str] = None   # 相关记忆（精简版）
-    story_skeleton: Optional[str] = None      # 故事骨架（50章+启用）
+    story_skeleton: Optional[str] = None      # 故事骨架（20章+启用）
     mcp_references: Optional[str] = None      # MCP参考资料
     foreshadow_context: Optional[str] = None  # 伏笔上下文（待回收/需埋设）
     style_guide: Optional[str] = None         # 风格指南（从已有章节学习）
+    previous_chapters_summary: Optional[str] = None  # 前几章摘要（增强连贯性）
+    full_outline_context: Optional[str] = None  # 完整大纲上下文（把握全局）
     
     # === 元信息 ===
     context_stats: Dict[str, Any] = field(default_factory=dict)  # 统计信息
@@ -65,7 +67,9 @@ class ChapterContext:
         """计算总上下文长度"""
         total = 0
         for field_name in ['chapter_outline', 'continuation_point', 'chapter_characters',
-                          'relevant_memories', 'story_skeleton', 'style_instruction', 'foreshadow_context', 'style_guide']:
+                          'relevant_memories', 'story_skeleton', 'style_instruction', 
+                          'foreshadow_context', 'style_guide', 'previous_chapters_summary',
+                          'full_outline_context']:
             value = getattr(self, field_name, None)
             if value:
                 total += len(value)
@@ -83,16 +87,43 @@ class ChapterContextBuilder:
     - 第51章+：上一章结尾500字 + 故事骨架 + 智能记忆5条
     """
     
-    # 配置常量
-    ENDING_LENGTH_SHORT = 300    # 1-10章：短衔接
-    ENDING_LENGTH_NORMAL = 500   # 11章+：标准衔接
-    MEMORY_COUNT_LIGHT = 3       # 11-50章：轻量记忆
-    MEMORY_COUNT_FULL = 5        # 51章+：完整记忆
-    SKELETON_THRESHOLD = 50      # 启用故事骨架的章节阈值
-    SKELETON_SAMPLE_INTERVAL = 10  # 故事骨架采样间隔
-    MEMORY_IMPORTANCE_THRESHOLD = 0.7  # 记忆重要性阈值
-    STYLE_MAX_LENGTH = 200       # 风格描述最大长度
-    MAX_CONTEXT_LENGTH = 3000    # 总上下文最大字符数
+    # 配置常量 - 充分利用100K上下文窗口
+    # 直接上文：上一章结尾（完整保留，确保衔接自然）
+    ENDING_LENGTH_SHORT = 6000    # 1-10章：上一章结尾6000字
+    ENDING_LENGTH_NORMAL = 8000   # 11-30章：上一章结尾8000字
+    ENDING_LENGTH_LONG = 10000    # 31章+：上一章结尾10000字（几乎完整的上一章）
+    
+    # 记忆检索配置
+    MEMORY_COUNT_LIGHT = 5       # 11-30章：5条记忆
+    MEMORY_COUNT_MEDIUM = 8      # 31-50章：8条记忆
+    MEMORY_COUNT_FULL = 10       # 51章+：10条记忆
+    SKELETON_THRESHOLD = 20      # 启用故事骨架的章节阈值
+    SKELETON_SAMPLE_INTERVAL = 5 # 故事骨架采样间隔
+    MEMORY_IMPORTANCE_THRESHOLD = 0.5  # 记忆重要性阈值
+    STYLE_MAX_LENGTH = 500       # 风格描述最大长度
+    MAX_CONTEXT_LENGTH = 45000   # 总上下文最大字符数（约90K tokens，留10K给输出）
+    
+    # === 分层递减上下文配置（核心优化）===
+    # 原则：距离越近，信息越详细；距离越远，压缩越狠
+    # 目标：充分利用100K上下文，同时避免信息过载
+    TIERED_CONTEXT_CONFIG = {
+        # 近期章节（前10章）：每章独立摘要，详细保留
+        "recent": {
+            "range": 10,              # 最近10章
+            "chars_per_chapter": 1200  # 每章约1200字摘要
+        },
+        # 中期章节（前11-25章）：每5章合并摘要
+        "medium": {
+            "range": 25,              # 覆盖到前25章
+            "chars_per_group": 1500,  # 每5章合并为1500字
+            "group_size": 5
+        },
+        # 远期章节（26章以前）：每10章合并摘要
+        "distant": {
+            "chars_per_group": 1200,  # 每10章合并为1200字
+            "group_size": 10
+        }
+    }
     
     def __init__(self, memory_service=None):
         """
@@ -158,7 +189,7 @@ class ChapterContextBuilder:
             chapter, outline, project.outline_mode
         )
         
-        # === 衔接锚点（根据章节调整长度）===
+        # === 衔接锚点（根据章节调整长度，大幅增加）===
         if chapter_number == 1:
             context.continuation_point = None
             logger.info("  ✅ 第1章无需衔接锚点")
@@ -166,12 +197,17 @@ class ChapterContextBuilder:
             context.continuation_point = await self._get_last_ending(
                 chapter, db, self.ENDING_LENGTH_SHORT
             )
-            logger.info(f"  ✅ 衔接锚点（短）: {len(context.continuation_point or '')}字符")
-        else:
+            logger.info(f"  ✅ 衔接锚点（1-10章）: {len(context.continuation_point or '')}字符")
+        elif chapter_number <= 30:
             context.continuation_point = await self._get_last_ending(
                 chapter, db, self.ENDING_LENGTH_NORMAL
             )
-            logger.info(f"  ✅ 衔接锚点（标准）: {len(context.continuation_point or '')}字符")
+            logger.info(f"  ✅ 衔接锚点（11-30章）: {len(context.continuation_point or '')}字符")
+        else:
+            context.continuation_point = await self._get_last_ending(
+                chapter, db, self.ENDING_LENGTH_LONG
+            )
+            logger.info(f"  ✅ 衔接锚点（31章+）: {len(context.continuation_point or '')}字符")
         
         # === P1-重要信息 ===
         context.chapter_characters = await self._build_chapter_characters(
@@ -183,12 +219,15 @@ class ChapterContextBuilder:
         if style_content:
             context.style_instruction = self._summarize_style(style_content)
         
-        # === P2-参考信息（条件触发）===
-        if chapter_number > 10 and self.memory_service:
-            memory_limit = (
-                self.MEMORY_COUNT_LIGHT if chapter_number <= 50
-                else self.MEMORY_COUNT_FULL
-            )
+        # === P2-参考信息（条件触发，更早启用）===
+        # 从第5章开始就获取记忆，帮助保持连贯性
+        if chapter_number > 5 and self.memory_service:
+            if chapter_number <= 30:
+                memory_limit = self.MEMORY_COUNT_LIGHT
+            elif chapter_number <= 50:
+                memory_limit = self.MEMORY_COUNT_MEDIUM
+            else:
+                memory_limit = self.MEMORY_COUNT_FULL
             context.relevant_memories = await self._get_relevant_memories(
                 user_id, project.id, chapter_number, 
                 context.chapter_outline,
@@ -196,12 +235,27 @@ class ChapterContextBuilder:
             )
             logger.info(f"  ✅ 相关记忆: {len(context.relevant_memories or '')}字符")
         
-        # 故事骨架（50章+）
+        # 故事骨架（20章+，更早启用）
         if chapter_number > self.SKELETON_THRESHOLD:
             context.story_skeleton = await self._build_story_skeleton(
                 project.id, chapter_number, db
             )
             logger.info(f"  ✅ 故事骨架: {len(context.story_skeleton or '')}字符")
+        
+        # === 前几章摘要（第3章开始，增强连贯性）===
+        if chapter_number >= 3:
+            context.previous_chapters_summary = await self._build_previous_chapters_summary(
+                project.id, chapter_number, db
+            )
+            if context.previous_chapters_summary:
+                logger.info(f"  ✅ 前章摘要: {len(context.previous_chapters_summary)}字符")
+        
+        # === 完整大纲上下文（把握全局方向）===
+        context.full_outline_context = await self._build_full_outline_context(
+            project.id, chapter_number, db
+        )
+        if context.full_outline_context:
+            logger.info(f"  ✅ 大纲上下文: {len(context.full_outline_context)}字符")
         
         # === 伏笔上下文（始终构建）===
         context.foreshadow_context = await self._build_foreshadow_context(
@@ -224,6 +278,8 @@ class ChapterContextBuilder:
             "characters_length": len(context.chapter_characters),
             "memories_length": len(context.relevant_memories or ""),
             "skeleton_length": len(context.story_skeleton or ""),
+            "previous_summary_length": len(context.previous_chapters_summary or ""),
+            "outline_context_length": len(context.full_outline_context or ""),
             "foreshadow_length": len(context.foreshadow_context or ""),
             "style_guide_length": len(context.style_guide or ""),
             "total_length": context.get_total_context_length()
@@ -764,6 +820,202 @@ class ChapterContextBuilder:
         except Exception as e:
             logger.error(f"❌ 构建风格指南失败: {str(e)}")
             return None
+
+    async def _build_previous_chapters_summary(
+        self,
+        project_id: str,
+        chapter_number: int,
+        db: AsyncSession
+    ) -> Optional[str]:
+        """
+        构建分层递减的前章摘要，充分利用100K上下文
+        
+        分层策略（以第51章为例）：
+        - 近期层（第41-50章）：每章独立摘要，约1200字/章 = 12000字
+        - 中期层（第26-40章）：每5章合并摘要，约1500字/组 = 4500字
+        - 远期层（第1-25章）：每10章合并摘要，约1200字/组 = 3600字
+        总计约：20000字，充分利用上下文空间
+        """
+        if chapter_number <= 1:
+            return None
+        
+        config = self.TIERED_CONTEXT_CONFIG
+        summaries = []
+        
+        # 获取所有前置章节
+        result = await db.execute(
+            select(Chapter)
+            .where(Chapter.project_id == project_id)
+            .where(Chapter.chapter_number < chapter_number)
+            .where(Chapter.content.isnot(None))
+            .where(Chapter.content != "")
+            .order_by(Chapter.chapter_number)
+        )
+        all_chapters = result.scalars().all()
+        
+        if not all_chapters:
+            return None
+        
+        # 按距离分层
+        recent_start = max(1, chapter_number - config["recent"]["range"])
+        medium_start = max(1, chapter_number - config["medium"]["range"])
+        
+        recent_chapters = [ch for ch in all_chapters if ch.chapter_number >= recent_start]
+        medium_chapters = [ch for ch in all_chapters if medium_start <= ch.chapter_number < recent_start]
+        distant_chapters = [ch for ch in all_chapters if ch.chapter_number < medium_start]
+        
+        # === 第1层：远期摘要（最早的章节，压缩最狠）===
+        if distant_chapters:
+            summaries.append("【远期剧情回顾】")
+            group_size = config["distant"]["group_size"]
+            chars_per_group = config["distant"]["chars_per_group"]
+            
+            # 按组合并
+            for i in range(0, len(distant_chapters), group_size):
+                group = distant_chapters[i:i+group_size]
+                if group:
+                    start_ch = group[0].chapter_number
+                    end_ch = group[-1].chapter_number
+                    
+                    # 合并该组的摘要
+                    group_summary = self._merge_chapter_summaries(group, chars_per_group)
+                    summaries.append(f"\n--- 第{start_ch}-{end_ch}章概要 ---")
+                    summaries.append(group_summary)
+        
+        # === 第2层：中期摘要（中等距离，适度压缩）===
+        if medium_chapters:
+            summaries.append("\n【中期剧情发展】")
+            group_size = config["medium"]["group_size"]
+            chars_per_group = config["medium"]["chars_per_group"]
+            
+            for i in range(0, len(medium_chapters), group_size):
+                group = medium_chapters[i:i+group_size]
+                if group:
+                    start_ch = group[0].chapter_number
+                    end_ch = group[-1].chapter_number
+                    
+                    group_summary = self._merge_chapter_summaries(group, chars_per_group)
+                    summaries.append(f"\n--- 第{start_ch}-{end_ch}章概要 ---")
+                    summaries.append(group_summary)
+        
+        # === 第3层：近期详情（最近的章节，详细保留）===
+        if recent_chapters:
+            summaries.append("\n【近期剧情详情】")
+            chars_per_chapter = config["recent"]["chars_per_chapter"]
+            
+            for ch in recent_chapters:
+                chapter_summary = self._get_chapter_summary(ch, chars_per_chapter)
+                summaries.append(f"\n=== 第{ch.chapter_number}章《{ch.title}》===")
+                summaries.append(chapter_summary)
+        
+        result_text = "\n".join(summaries)
+        logger.info(f"  📚 分层摘要构建完成: 远期{len(distant_chapters)}章 + 中期{len(medium_chapters)}章 + 近期{len(recent_chapters)}章 = {len(result_text)}字符")
+        
+        return result_text
+    
+    def _get_chapter_summary(self, chapter: Chapter, max_chars: int) -> str:
+        """
+        获取单章摘要
+        优先使用AI生成的summary字段，否则提取开头+结尾
+        """
+        # 优先使用已有的AI摘要
+        if chapter.summary and len(chapter.summary) >= 100:
+            summary = chapter.summary
+            if len(summary) > max_chars:
+                return summary[:max_chars] + "..."
+            return summary
+        
+        # 回退：提取开头和结尾
+        content = chapter.content or ""
+        if not content:
+            return "（无内容）"
+        
+        if len(content) <= max_chars:
+            return content
+        
+        # 开头40% + 结尾60%（结尾更重要，包含悬念）
+        head_len = int(max_chars * 0.4)
+        tail_len = max_chars - head_len - 10  # 留10字符给省略号
+        
+        return content[:head_len] + "\n...\n" + content[-tail_len:]
+    
+    def _merge_chapter_summaries(self, chapters: List[Chapter], max_chars: int) -> str:
+        """
+        合并多章摘要为一个精炼的段落
+        """
+        if not chapters:
+            return ""
+        
+        # 每章分配的字符数
+        chars_per_chapter = max_chars // len(chapters)
+        
+        merged_parts = []
+        for ch in chapters:
+            # 获取该章的精炼摘要
+            if ch.summary and len(ch.summary) >= 50:
+                # 使用AI摘要的核心部分
+                summary = ch.summary[:chars_per_chapter]
+            else:
+                # 提取内容的关键部分（结尾为主，包含悬念）
+                content = ch.content or ""
+                if len(content) > chars_per_chapter:
+                    # 主要取结尾（包含悬念和转折）
+                    summary = content[-(chars_per_chapter-20):] if chars_per_chapter > 20 else content[-chars_per_chapter:]
+                else:
+                    summary = content
+            
+            if summary:
+                merged_parts.append(f"第{ch.chapter_number}章：{summary.strip()}")
+        
+        return "\n".join(merged_parts)
+    
+    async def _build_full_outline_context(
+        self,
+        project_id: str,
+        chapter_number: int,
+        db: AsyncSession
+    ) -> Optional[str]:
+        """
+        构建完整大纲上下文，帮助AI把握全局方向
+        """
+        result = await db.execute(
+            select(Outline)
+            .where(Outline.project_id == project_id)
+            .order_by(Outline.order_index)
+        )
+        outlines = result.scalars().all()
+        
+        if not outlines:
+            return None
+        
+        context_parts = []
+        
+        # 已完成章节大纲
+        past_outlines = [o for o in outlines if o.order_index < chapter_number]
+        if past_outlines:
+            context_parts.append("【已完成章节概要】")
+            for o in past_outlines[-10:]:
+                title = o.title or f"第{o.order_index}章"
+                content_preview = (o.content or "")[:100]
+                context_parts.append(f"第{o.order_index}章《{title}》：{content_preview}")
+        
+        # 当前章节大纲
+        current_outline = next((o for o in outlines if o.order_index == chapter_number), None)
+        if current_outline:
+            context_parts.append(f"\n【当前章节 - 第{chapter_number}章】")
+            context_parts.append(f"标题：{current_outline.title}")
+            context_parts.append(f"内容：{current_outline.content}")
+        
+        # 后续章节预览
+        future_outlines = [o for o in outlines if o.order_index > chapter_number][:5]
+        if future_outlines:
+            context_parts.append("\n【后续章节预览 - 可适当埋设伏笔】")
+            for o in future_outlines:
+                title = o.title or f"第{o.order_index}章"
+                content_preview = (o.content or "")[:80]
+                context_parts.append(f"第{o.order_index}章《{title}》：{content_preview}")
+        
+        return "\n".join(context_parts)
 
 
 class FocusedMemoryRetriever:

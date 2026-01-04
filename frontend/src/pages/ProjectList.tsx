@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Button, Empty, Modal, message, Spin, Row, Col, Statistic, Space, Tag, Progress, Typography, Badge, Alert, Upload, Checkbox, Divider, Switch, Dropdown, Form, Input, InputNumber } from 'antd';
-import { EditOutlined, DeleteOutlined, BookOutlined, RocketOutlined, CalendarOutlined, FileTextOutlined, TrophyOutlined, FireOutlined, SettingOutlined, InfoCircleOutlined, CloseOutlined, UploadOutlined, DownloadOutlined, ApiOutlined, MoreOutlined, BulbOutlined, LoadingOutlined, FileSearchOutlined } from '@ant-design/icons';
-import { projectApi } from '../services/api';
+import { EditOutlined, DeleteOutlined, BookOutlined, RocketOutlined, CalendarOutlined, FileTextOutlined, TrophyOutlined, FireOutlined, SettingOutlined, InfoCircleOutlined, CloseOutlined, UploadOutlined, DownloadOutlined, ApiOutlined, MoreOutlined, BulbOutlined, LoadingOutlined, FileSearchOutlined, ReadOutlined } from '@ant-design/icons';
+import { projectApi, chapterApi } from '../services/api';
 import { useStore } from '../store';
 import { useProjectSync } from '../store/hooks';
 import type { ReactNode } from 'react';
@@ -33,6 +33,7 @@ export default function ProjectList() {
   const [editingProject, setEditingProject] = useState<any>(null);
   const [editForm] = Form.useForm();
   const [updating, setUpdating] = useState(false);
+  const [chapterStats, setChapterStats] = useState<Record<string, { total: number; completed: number; firstChapterId?: string }>>({});
 
   const { refreshProjects, deleteProject } = useProjectSync();
 
@@ -40,6 +41,32 @@ export default function ProjectList() {
     refreshProjects();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 获取每个项目的章节统计
+  useEffect(() => {
+    const fetchChapterStats = async () => {
+      if (!projects || projects.length === 0) return;
+      const stats: Record<string, { total: number; completed: number; firstChapterId?: string }> = {};
+      await Promise.all(
+        projects.map(async (project: any) => {
+          try {
+            const res = await chapterApi.getChapters(project.id);
+            const items = (res as any).items || res || [];
+            const completedChapters = items.filter((c: any) => c.word_count > 0).sort((a: any, b: any) => a.chapter_number - b.chapter_number);
+            stats[project.id] = {
+              total: items.length,
+              completed: completedChapters.length,
+              firstChapterId: completedChapters[0]?.id
+            };
+          } catch {
+            stats[project.id] = { total: 0, completed: 0 };
+          }
+        })
+      );
+      setChapterStats(stats);
+    };
+    fetchChapterStats();
+  }, [projects]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -999,24 +1026,36 @@ export default function ProjectList() {
                                 <div style={{
                                   textAlign: 'center',
                                   padding: '14px 0',
-                                  background: 'linear-gradient(135deg, #F0FDF4 0%, #ECFDF5 100%)',
+                                  background: 'linear-gradient(135deg, #FFF7E6 0%, #FFFBE6 100%)',
                                   borderRadius: 12,
-                                  border: '1px solid rgba(82, 196, 26, 0.15)'
+                                  border: '1px solid rgba(250, 173, 20, 0.15)'
                                 }}>
-                                  <div style={{ fontSize: 22, fontWeight: 'bold', color: 'var(--color-success)' }}>
-                                    {project.target_words
-                                      ? (project.target_words >= 1000000
-                                        ? (project.target_words / 1000000).toFixed(1) + 'M'
-                                        : project.target_words >= 1000
-                                          ? (project.target_words / 1000).toFixed(1) + 'K'
-                                          : project.target_words)
+                                  <div style={{ fontSize: 22, fontWeight: 'bold', color: '#fa8c16' }}>
+                                    {chapterStats[project.id] 
+                                      ? `${chapterStats[project.id].completed}/${chapterStats[project.id].total}`
                                       : '--'
                                     }
                                   </div>
-                                  <Text type="secondary" style={{ fontSize: 12 }}>目标字数</Text>
+                                  <Text type="secondary" style={{ fontSize: 12 }}>章节进度</Text>
                                 </div>
                               </Col>
                             </Row>
+
+                            {/* 阅读按钮 */}
+                            {chapterStats[project.id]?.completed > 0 && chapterStats[project.id]?.firstChapterId && (
+                              <Button
+                                type="primary"
+                                icon={<ReadOutlined />}
+                                block
+                                style={{ marginTop: 12, borderRadius: 8 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/chapters/${chapterStats[project.id].firstChapterId}/reader`);
+                                }}
+                              >
+                                阅读文章 ({chapterStats[project.id].completed} 章)
+                              </Button>
+                            )}
 
                             <div style={{
                               marginTop: 18,

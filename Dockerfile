@@ -32,11 +32,13 @@ WORKDIR /app
 RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources \
     && sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources
 
-# 安装系统依赖（添加数据库工具）
+# 安装系统依赖（添加数据库工具和Rust编译器）
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
     netcat-traditional \
+    cargo \
+    rustc \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制后端依赖文件

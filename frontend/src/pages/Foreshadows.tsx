@@ -66,9 +66,9 @@ export default function Foreshadows() {
       );
       setForeshadows(response.data.items);
       setStats({
-        planted: response.data.planted_count,
-        resolved: response.data.resolved_count,
-        pending: response.data.pending_count,
+        planted: response.data.planted_count || 0,
+        resolved: response.data.resolved_count || 0,
+        pending: response.data.pending_count || 0,
       });
     } catch (error) {
       message.error('获取伏笔列表失败');
@@ -376,7 +376,7 @@ export default function Foreshadows() {
                 {record.tags && record.tags.length > 0 && (
                   <p>
                     <strong>标签：</strong>
-                    {record.tags.map(tag => <Tag key={tag}>{tag}</Tag>)}
+                    {record.tags.map((tag: string) => <Tag key={tag}>{tag}</Tag>)}
                   </p>
                 )}
               </div>

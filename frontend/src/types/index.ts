@@ -11,6 +11,48 @@ export interface User {
   last_login: string;
 }
 
+// 伏笔管理类型定义
+export interface Foreshadow {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string;
+  foreshadow_type: 'plot' | 'character' | 'item' | 'setting' | 'other';
+  status: 'planted' | 'developing' | 'resolved' | 'abandoned';
+  planted_chapter: number;
+  planted_content?: string;
+  resolved_chapter?: number;
+  resolved_content?: string;
+  resolution_description?: string;
+  importance: number;
+  tags: string[];
+  notes?: string;
+  auto_remind?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ForeshadowListResponse {
+  items: Foreshadow[];
+  total: number;
+  planted_count?: number;
+  resolved_count?: number;
+  pending_count?: number;
+}
+
+export interface ForeshadowReminder {
+  id: string;
+  foreshadow_id?: string;
+  title: string;
+  description: string;
+  planted_chapter: number;
+  chapters_since_planted: number;
+  chapters_remaining: number;
+  expected_resolve_chapter?: number;
+  importance: number;
+  suggested_action: string;
+}
+
 // 设置类型定义
 export interface Settings {
   id: string;
