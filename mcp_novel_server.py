@@ -60,6 +60,7 @@ client = NovelClient()
 async def list_tools() -> List[Tool]:
     """列出所有可用工具"""
     return [
+        # ============ 项目管理 ============
         Tool(
             name="novel_list_projects",
             description="列出所有小说项目",
@@ -104,6 +105,30 @@ async def list_tools() -> List[Tool]:
                 "required": ["project_id"]
             }
         ),
+        Tool(
+            name="novel_delete_project",
+            description="删除项目及所有关联数据",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "项目ID"}
+                },
+                "required": ["project_id"]
+            }
+        ),
+        Tool(
+            name="novel_export_project",
+            description="导出项目为JSON文件",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "项目ID"}
+                },
+                "required": ["project_id"]
+            }
+        ),
+        
+        # ============ 角色管理 ============
         Tool(
             name="novel_create_character",
             description="创建角色",
@@ -155,6 +180,33 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
+            name="novel_update_character",
+            description="更新角色信息",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "character_id": {"type": "string", "description": "角色ID"},
+                    "name": {"type": "string", "description": "角色名"},
+                    "personality": {"type": "string", "description": "性格描述"},
+                    "background": {"type": "string", "description": "背景故事"}
+                },
+                "required": ["character_id"]
+            }
+        ),
+        Tool(
+            name="novel_delete_character",
+            description="删除角色",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "character_id": {"type": "string", "description": "角色ID"}
+                },
+                "required": ["character_id"]
+            }
+        ),
+        
+        # ============ 大纲管理 ============
+        Tool(
             name="novel_create_outline",
             description="创建章节大纲",
             inputSchema={
@@ -203,6 +255,32 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
+            name="novel_update_outline",
+            description="更新大纲",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "outline_id": {"type": "string", "description": "大纲ID"},
+                    "title": {"type": "string", "description": "章节标题"},
+                    "content": {"type": "string", "description": "章节概要"}
+                },
+                "required": ["outline_id"]
+            }
+        ),
+        Tool(
+            name="novel_delete_outline",
+            description="删除大纲",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "outline_id": {"type": "string", "description": "大纲ID"}
+                },
+                "required": ["outline_id"]
+            }
+        ),
+        
+        # ============ 章节管理 ============
+        Tool(
             name="novel_create_chapters_from_outlines",
             description="从大纲创建所有章节（空壳）",
             inputSchema={
@@ -213,6 +291,54 @@ async def list_tools() -> List[Tool]:
                 "required": ["project_id"]
             }
         ),
+        Tool(
+            name="novel_list_chapters",
+            description="获取项目的所有章节",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "项目ID"}
+                },
+                "required": ["project_id"]
+            }
+        ),
+        Tool(
+            name="novel_get_chapter",
+            description="获取章节内容",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "chapter_id": {"type": "string", "description": "章节ID"}
+                },
+                "required": ["chapter_id"]
+            }
+        ),
+        Tool(
+            name="novel_update_chapter",
+            description="更新章节内容",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "chapter_id": {"type": "string", "description": "章节ID"},
+                    "title": {"type": "string", "description": "章节标题"},
+                    "content": {"type": "string", "description": "章节内容"}
+                },
+                "required": ["chapter_id"]
+            }
+        ),
+        Tool(
+            name="novel_delete_chapter",
+            description="删除章节",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "chapter_id": {"type": "string", "description": "章节ID"}
+                },
+                "required": ["chapter_id"]
+            }
+        ),
+        
+        # ============ 批量生成 ============
         Tool(
             name="novel_batch_generate",
             description="提交批量生成任务，自动生成章节内容",
@@ -239,13 +365,26 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
+            name="novel_cancel_generation",
+            description="取消正在进行的生成任务",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "batch_id": {"type": "string", "description": "批次ID"}
+                },
+                "required": ["batch_id"]
+            }
+        ),
+        Tool(
             name="novel_resume_all",
             description="恢复所有中断的生成任务",
             inputSchema={"type": "object", "properties": {}}
         ),
+        
+        # ============ 高级功能 ============
         Tool(
-            name="novel_get_chapter",
-            description="获取章节内容",
+            name="novel_check_quality",
+            description="评估章节质量（基础指标+AI评分）",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -254,6 +393,78 @@ async def list_tools() -> List[Tool]:
                 "required": ["chapter_id"]
             }
         ),
+        Tool(
+            name="novel_check_consistency",
+            description="检测章节一致性（角色行为、情节连贯）",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "chapter_id": {"type": "string", "description": "章节ID"}
+                },
+                "required": ["chapter_id"]
+            }
+        ),
+        Tool(
+            name="novel_check_duplicate",
+            description="检测重复内容",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "项目ID"},
+                    "chapter_id": {"type": "string", "description": "章节ID（可选，不填则检测整个项目）"}
+                },
+                "required": ["project_id"]
+            }
+        ),
+        Tool(
+            name="novel_list_foreshadows",
+            description="获取项目的所有伏笔",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "项目ID"}
+                },
+                "required": ["project_id"]
+            }
+        ),
+        Tool(
+            name="novel_create_foreshadow",
+            description="创建伏笔",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "项目ID"},
+                    "title": {"type": "string", "description": "伏笔标题"},
+                    "description": {"type": "string", "description": "伏笔描述"},
+                    "plant_chapter_id": {"type": "string", "description": "埋设章节ID"}
+                },
+                "required": ["project_id", "title", "description"]
+            }
+        ),
+        Tool(
+            name="novel_get_timeline",
+            description="获取项目时间线事件",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "项目ID"}
+                },
+                "required": ["project_id"]
+            }
+        ),
+        Tool(
+            name="novel_analyze_style",
+            description="分析项目写作风格",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "项目ID"}
+                },
+                "required": ["project_id"]
+            }
+        ),
+        
+        # ============ 一键Pipeline ============
         Tool(
             name="novel_full_pipeline",
             description="一键创建完整小说（项目+世界观+角色+大纲+章节+生成）",
@@ -442,6 +653,90 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         elif name == "novel_get_chapter":
             result = await client.request("get", f"/api/chapters/{arguments['chapter_id']}")
             return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+        
+        # ============ 新增工具实现 ============
+        elif name == "novel_delete_project":
+            result = await client.request("delete", f"/api/projects/{arguments['project_id']}")
+            return [TextContent(type="text", text=f"✅ 项目删除成功")]
+        
+        elif name == "novel_export_project":
+            result = await client.request("get", f"/api/projects/{arguments['project_id']}/export")
+            return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False)[:5000] + "...")]
+        
+        elif name == "novel_update_character":
+            data = {k: v for k, v in arguments.items() if k != "character_id" and v}
+            result = await client.request("put", f"/api/characters/{arguments['character_id']}", json=data)
+            return [TextContent(type="text", text=f"✅ 角色更新成功")]
+        
+        elif name == "novel_delete_character":
+            result = await client.request("delete", f"/api/characters/{arguments['character_id']}")
+            return [TextContent(type="text", text=f"✅ 角色删除成功")]
+        
+        elif name == "novel_update_outline":
+            data = {k: v for k, v in arguments.items() if k != "outline_id" and v}
+            result = await client.request("put", f"/api/outlines/{arguments['outline_id']}", json=data)
+            return [TextContent(type="text", text=f"✅ 大纲更新成功")]
+        
+        elif name == "novel_delete_outline":
+            result = await client.request("delete", f"/api/outlines/{arguments['outline_id']}")
+            return [TextContent(type="text", text=f"✅ 大纲删除成功")]
+        
+        elif name == "novel_list_chapters":
+            result = await client.request("get", f"/api/chapters/project/{arguments['project_id']}?limit=200")
+            items = result.get("items", [])
+            generated = len([c for c in items if c.get("content") and len(c["content"]) > 100])
+            return [TextContent(type="text", text=f"共 {result.get('total', 0)} 章，已生成 {generated} 章")]
+        
+        elif name == "novel_update_chapter":
+            data = {k: v for k, v in arguments.items() if k != "chapter_id" and v}
+            result = await client.request("put", f"/api/chapters/{arguments['chapter_id']}", json=data)
+            return [TextContent(type="text", text=f"✅ 章节更新成功")]
+        
+        elif name == "novel_delete_chapter":
+            result = await client.request("delete", f"/api/chapters/{arguments['chapter_id']}")
+            return [TextContent(type="text", text=f"✅ 章节删除成功")]
+        
+        elif name == "novel_cancel_generation":
+            result = await client.request("post", f"/api/chapters/batch-generate/{arguments['batch_id']}/cancel")
+            return [TextContent(type="text", text=f"✅ 生成任务已取消")]
+        
+        elif name == "novel_check_quality":
+            result = await client.request("get", f"/api/quality/chapter/{arguments['chapter_id']}/basic")
+            return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+        
+        elif name == "novel_check_consistency":
+            result = await client.request("get", f"/api/consistency/chapter/{arguments['chapter_id']}/check")
+            return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+        
+        elif name == "novel_check_duplicate":
+            if arguments.get("chapter_id"):
+                result = await client.request("get", f"/api/duplicate/chapter/{arguments['chapter_id']}/check")
+            else:
+                result = await client.request("get", f"/api/duplicate/project/{arguments['project_id']}/check")
+            return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+        
+        elif name == "novel_list_foreshadows":
+            result = await client.request("get", f"/api/foreshadows?project_id={arguments['project_id']}")
+            items = result.get("items", []) if isinstance(result, dict) else result
+            return [TextContent(type="text", text=f"共 {len(items)} 个伏笔")]
+        
+        elif name == "novel_create_foreshadow":
+            result = await client.request("post", "/api/foreshadows", json={
+                "project_id": arguments["project_id"],
+                "title": arguments["title"],
+                "description": arguments["description"],
+                "plant_chapter_id": arguments.get("plant_chapter_id")
+            })
+            return [TextContent(type="text", text=f"✅ 伏笔创建成功: {arguments['title']}")]
+        
+        elif name == "novel_get_timeline":
+            result = await client.request("get", f"/api/timeline?project_id={arguments['project_id']}")
+            items = result.get("items", []) if isinstance(result, dict) else result
+            return [TextContent(type="text", text=f"共 {len(items)} 个时间线事件")]
+        
+        elif name == "novel_analyze_style":
+            result = await client.request("post", f"/api/style-analysis/project/{arguments['project_id']}/learn")
+            return [TextContent(type="text", text=f"✅ 风格分析完成")]
         
         elif name == "novel_full_pipeline":
             steps = []
