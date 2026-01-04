@@ -77,6 +77,11 @@ class Settings(BaseSettings):
     default_temperature: float = 0.7
     default_max_tokens: int = 32000
     
+    # 二次优化配置
+    refinement_api_base: Optional[str] = None  # LiteLLM端点
+    refinement_api_key: Optional[str] = None   # API Key
+    refinement_model: Optional[str] = None     # 默认优化模型
+    
     # MCP适配器配置
     enable_mcp_adapter: bool = True  # 是否启用MCP适配器（自动检测API能力）
     mcp_adapter_cache_ttl_hours: int = 24  # API能力检测缓存时长（小时）
@@ -119,3 +124,38 @@ settings = Settings()
 config_logger.info(f"配置加载完成: {settings.app_name} v{settings.app_version}")
 config_logger.debug(f"调试模式: {settings.debug}")
 config_logger.debug(f"AI提供商: {settings.default_ai_provider}")
+
+
+class RefinementConfig:
+    """二次优化配置"""
+    
+    # 可用模型
+    AVAILABLE_MODELS = {
+        "opus": "bedrock/anthropic.claude-opus-4-5-20251101-v1:0-64k-thinking",
+        "sonnet": "bedrock/anthropic.claude-sonnet-4.5-20250929-v1:0-64k-1M-thinking"
+    }
+    
+    @classmethod
+    def get_api_base(cls) -> str:
+        return settings.refinement_api_base or "https://litellm.aws.xin/v1/chat/completions"
+    
+    @classmethod
+    def get_api_key(cls) -> str:
+        return settings.refinement_api_key or ""
+    
+    @classmethod
+    def get_model(cls, model_key: str = None) -> str:
+        """
+        获取模型名称
+        Args:
+            model_key: "opus" 或 "sonnet"，不传则使用默认
+        """
+        if model_key and model_key in cls.AVAILABLE_MODELS:
+            return cls.AVAILABLE_MODELS[model_key]
+        
+        if settings.refinement_model:
+            return settings.refinement_model
+        
+        # 默认使用opus
+        return cls.AVAILABLE_MODELS["opus"]
+

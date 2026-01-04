@@ -191,7 +191,8 @@ from app.api import (
     auth, users, settings, writing_styles, memories,
     mcp_plugins, admin, inspiration, prompt_templates,
     changelog, careers, foreshadows, consistency, timeline,
-    style_analysis, quality, duplicate, character_growth
+    style_analysis, quality, duplicate, character_growth,
+    refinement
 )
 
 app.include_router(auth.router, prefix="/api")
@@ -220,6 +221,7 @@ app.include_router(quality.router)  # 质量评分API
 app.include_router(duplicate.router)  # 重复检测API
 app.include_router(character_growth.router)  # 角色成长API
 app.include_router(changelog.router, prefix="/api")  # 更新日志API
+app.include_router(refinement.router)  # 二次优化API (已包含/api前缀)
 
 static_dir = Path(__file__).parent.parent / "static"
 if static_dir.exists():

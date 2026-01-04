@@ -18,6 +18,7 @@ from app.models.career import Career, CharacterCareer
 from app.models.prompt_template import PromptTemplate
 from app.models.foreshadow import Foreshadow, ForeshadowStatus, ForeshadowType
 from app.models.timeline import TimelineEvent
+from app.models.refinement import ChapterRefinement
 
 __all__ = [
     "Project",
@@ -45,5 +46,6 @@ __all__ = [
     "PromptTemplate",
     "Foreshadow",
     "ForeshadowStatus",
-    "ForeshadowType"
+    "ForeshadowType",
+    "ChapterRefinement"
 ]

@@ -1,5 +1,5 @@
 """章节数据模型"""
-from sqlalchemy import Column, String, Text, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, Integer, DateTime, ForeignKey, Boolean
 from sqlalchemy.sql import func
 from app.database import Base
 import uuid
@@ -24,6 +24,12 @@ class Chapter(Base):
     
     # 大纲展开规划数据（JSON格式）
     expansion_plan = Column(Text, comment="展开规划详情(JSON): 包含key_events, character_focus, emotional_tone等")
+    
+    # 二次优化状态
+    is_refined = Column(Boolean, default=False, index=True, comment="是否已优化")
+    refined_at = Column(DateTime, nullable=True, comment="优化时间")
+    refinement_id = Column(String(36), nullable=True, comment="关联优化记录ID")
+    refinement_model = Column(String(100), nullable=True, comment="优化使用的模型")
     
     created_at = Column(DateTime, server_default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment="更新时间")

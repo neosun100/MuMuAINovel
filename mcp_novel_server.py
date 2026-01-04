@@ -464,6 +464,56 @@ async def list_tools() -> List[Tool]:
             }
         ),
         
+        # ============ 二次优化 ============
+        Tool(
+            name="novel_refine_chapter",
+            description="优化单个章节（三段论）。使用高质量模型对已生成的章节进行深度优化：修正历史/事实错误、提升文笔质量、删除总结性文字、确保与上下文衔接。",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "chapter_id": {"type": "string", "description": "章节ID"},
+                    "model": {"type": "string", "enum": ["opus", "sonnet"], "description": "优化模型：opus(最高质量) 或 sonnet(性价比高)"}
+                },
+                "required": ["chapter_id"]
+            }
+        ),
+        Tool(
+            name="novel_refine_all",
+            description="串行优化项目所有章节（三段论）。批量优化指定范围的章节，第N章优化时使用第N-1章的优化版作为上下文。注意：这是耗时操作，100章约需5-8小时。",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "项目ID"},
+                    "start_chapter": {"type": "integer", "default": 1, "description": "起始章节号"},
+                    "end_chapter": {"type": "integer", "default": 100, "description": "结束章节号"},
+                    "model": {"type": "string", "enum": ["opus", "sonnet"], "description": "优化模型"}
+                },
+                "required": ["project_id"]
+            }
+        ),
+        Tool(
+            name="novel_refine_status",
+            description="查询优化进度。返回总章节数、已完成数、失败数、当前处理的章节和段落。",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "项目ID"}
+                },
+                "required": ["project_id"]
+            }
+        ),
+        Tool(
+            name="novel_refine_rollback",
+            description="将章节内容回滚到优化前的原文",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "chapter_id": {"type": "string", "description": "章节ID"}
+                },
+                "required": ["chapter_id"]
+            }
+        ),
+        
         # ============ 一键Pipeline ============
         Tool(
             name="novel_full_pipeline",
@@ -737,6 +787,78 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         elif name == "novel_analyze_style":
             result = await client.request("post", f"/api/style-analysis/project/{arguments['project_id']}/learn")
             return [TextContent(type="text", text=f"✅ 风格分析完成")]
+        
+        # ============ 二次优化工具 ============
+        elif name == "novel_refine_chapter":
+            chapter_id = arguments["chapter_id"]
+            model = arguments.get("model")
+            
+            payload = {"model": model} if model else {}
+            result = await client.request("post", f"/api/refinement/chapter/{chapter_id}", json=payload, timeout=600)
+            
+            return [TextContent(type="text", text=f"""✅ 章节优化完成
+
+章节: 第{result.get('chapter_number')}章
+原文字数: {result.get('original_words')}
+优化后字数: {result.get('refined_words')}
+使用模型: {result.get('model_used')}
+处理段数: {result.get('segments_processed')}
+""")]
+        
+        elif name == "novel_refine_all":
+            project_id = arguments["project_id"]
+            start = arguments.get("start_chapter", 1)
+            end = arguments.get("end_chapter", 100)
+            model = arguments.get("model")
+            
+            result = await client.request("post", f"/api/refinement/project/{project_id}/all", json={
+                "start_chapter": start,
+                "end_chapter": end,
+                "model": model
+            })
+            
+            return [TextContent(type="text", text=f"""✅ 批量优化任务已启动
+
+范围: 第{start}-{end}章
+使用模型: {model or 'opus (default)'}
+总章节数: {result.get('total_chapters')}
+
+使用 novel_refine_status 查询进度。
+预计耗时: {(end - start + 1) * 3}分钟（每章约3分钟）
+""")]
+        
+        elif name == "novel_refine_status":
+            project_id = arguments["project_id"]
+            result = await client.request("get", f"/api/refinement/project/{project_id}/status")
+            
+            progress = ""
+            if result.get("current_chapter"):
+                progress = f"\n当前: 第{result['current_chapter']}章 第{result['current_segment']}段"
+            
+            total = result.get('total', 0)
+            completed = result.get('completed', 0)
+            pct = (completed / total * 100) if total > 0 else 0
+            
+            return [TextContent(type="text", text=f"""📊 优化进度
+
+状态: {result.get('status')}
+总计: {total}章
+完成: {completed}章
+失败: {result.get('failed')}章
+待处理: {result.get('pending')}章{progress}
+
+完成率: {pct:.1f}%
+""")]
+        
+        elif name == "novel_refine_rollback":
+            chapter_id = arguments["chapter_id"]
+            result = await client.request("post", f"/api/refinement/chapter/{chapter_id}/rollback")
+            
+            return [TextContent(type="text", text=f"""✅ 已回滚到原文
+
+章节: 第{result.get('chapter_number')}章
+字数: {result.get('word_count')}
+""")]
         
         elif name == "novel_full_pipeline":
             steps = []
