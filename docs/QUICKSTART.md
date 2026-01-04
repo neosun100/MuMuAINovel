@@ -40,6 +40,8 @@
 | **API_MCP_COVERAGE.md** | API和MCP覆盖清单 | 需要查看功能覆盖时 |
 | **MCP_USAGE_GUIDE.md** | MCP Server使用指南 | 配置MCP时 |
 | **NOVEL_CREATION_PIPELINE.md** | 创作流水线详解 | 需要了解完整流程时 |
+| **ROADMAP.md** | 未来发展路线图 | 了解项目规划时 |
+| **TODO.md** | 详细开发任务清单 | 参与开发时 |
 
 ---
 
