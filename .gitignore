@@ -102,17 +102,36 @@ dmypy.json
 # Jupyter Notebook
 .ipynb_checkpoints
 
-#build
+# Build artifacts
 BUILD_GUIDE.md
 launcher.py
 launcher.spec
 mumuainovel.md
 logo.ico
 
-
+# Data directories
 data/
-docs/
 data_old/
+
+# Migration scripts
 backend/migrate_all_databases.py
 test_api.py
+
+# Embedding models (large files)
 backend/embedding/models--sentence-transformers--all-MiniLM-L6-v2
+
+# Project-specific scripts with credentials (use templates instead)
+generate_*.py
+auto_novel_creator.py
+auto_generate.py
+create_outlines.py
+
+# Projects data
+projects/
+
+# Resume logs
+resume.log
+
+# Cookies
+/tmp/cookies.txt
+cookies.txt

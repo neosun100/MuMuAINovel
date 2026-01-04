@@ -24,9 +24,72 @@ setup_logging(
 logger = get_logger(__name__)
 
 
+async def resume_interrupted_tasks():
+    """恢复中断的批量生成任务"""
+    from app.database import AsyncSessionLocal
+    from app.models.batch_generation_task import BatchGenerationTask
+    from app.models.chapter import Chapter
+    from sqlalchemy import select, and_
+    
+    try:
+        async with AsyncSessionLocal() as db:
+            # 查找所有running状态的任务（说明是被中断的）
+            result = await db.execute(
+                select(BatchGenerationTask).where(
+                    BatchGenerationTask.status.in_(['running', 'pending'])
+                )
+            )
+            interrupted_tasks = result.scalars().all()
+            
+            if not interrupted_tasks:
+                logger.info("📋 没有需要恢复的中断任务")
+                return
+            
+            logger.info(f"📋 发现 {len(interrupted_tasks)} 个中断任务，准备恢复...")
+            
+            for task in interrupted_tasks:
+                # 统计已完成的章节数
+                result = await db.execute(
+                    select(Chapter).where(
+                        and_(
+                            Chapter.project_id == task.project_id,
+                            Chapter.content != None,
+                            Chapter.content != ''
+                        )
+                    )
+                )
+                completed_chapters = len(result.scalars().all())
+                
+                # 计算需要继续的起始章节
+                next_chapter = completed_chapters + 1
+                remaining = task.start_chapter_number + task.chapter_count - next_chapter
+                
+                if remaining <= 0:
+                    # 任务实际已完成
+                    task.status = 'completed'
+                    task.completed_chapters = task.chapter_count
+                    logger.info(f"  ✅ 任务 {task.id[:8]} 实际已完成")
+                else:
+                    # 标记为interrupted，等待手动或自动恢复
+                    task.status = 'interrupted'
+                    task.completed_chapters = completed_chapters
+                    logger.info(f"  ⚠️ 任务 {task.id[:8]} 已中断: {completed_chapters}/{task.chapter_count}章完成，需从第{next_chapter}章继续")
+            
+            await db.commit()
+            logger.info("📋 中断任务状态已更新")
+            
+    except Exception as e:
+        logger.error(f"恢复中断任务时出错: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    logger.info("应用启动中...")
+    
+    # 恢复中断的任务
+    await resume_interrupted_tasks()
+    
     logger.info("应用启动完成")
     
     yield

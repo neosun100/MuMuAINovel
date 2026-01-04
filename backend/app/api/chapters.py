@@ -1479,7 +1479,10 @@ async def generate_chapter_content_stream(
                         story_skeleton=chapter_context.story_skeleton or '',
                         relevant_memories=chapter_context.relevant_memories or '',
                         foreshadow_context=chapter_context.foreshadow_context or '',
-                        style_guide=chapter_context.style_guide or ''
+                        style_guide=chapter_context.style_guide or '',
+                        # 新增：前章摘要和完整大纲上下文
+                        previous_chapters_summary=chapter_context.previous_chapters_summary or '',
+                        full_outline_context=chapter_context.full_outline_context or ''
                     )
                 else:
                     # 第一章，使用无前置内容模板
@@ -1531,11 +1534,15 @@ async def generate_chapter_content_stream(
 确保在整个章节创作过程中始终保持风格的一致性。"""
                     logger.info(f"✅ 已将写作风格注入系统提示词（{len(style_content)}字符）")
                 
-                # 准备生成参数
+                # 准备生成参数 - 根据目标字数计算max_tokens
+                # 中文约1.5-2个token/字，预留余量，目标字数*3作为max_tokens
+                calculated_max_tokens = max(16000, target_word_count * 3)
                 generate_kwargs = {
                     "prompt": prompt,
-                    "system_prompt": system_prompt_with_style  # 🔑 关键：使用系统提示词传递风格
+                    "system_prompt": system_prompt_with_style,  # 🔑 关键：使用系统提示词传递风格
+                    "max_tokens": calculated_max_tokens  # 🔑 显式设置max_tokens确保不被截断
                 }
+                logger.info(f"  目标字数: {target_word_count}, max_tokens: {calculated_max_tokens}")
                 if custom_model:
                     logger.info(f"  使用自定义模型: {custom_model}")
                     generate_kwargs["model"] = custom_model
@@ -2540,10 +2547,16 @@ async def execute_batch_generation_in_order(
                     
                     retry_count += 1
                     
-                    # 如果还有重试机会，等待一小段时间后重试
+                    # 如果还有重试机会，等待后重试（分阶段指数退避）
                     if retry_count <= task.max_retries:
-                        wait_time = min(2 ** retry_count, 10)  # 指数退避，最多等待10秒
-                        logger.info(f"⏳ 等待 {wait_time} 秒后重试...")
+                        # 阶段性退避: 1-3次快速重试，4-6次中等等待，7+次长等待
+                        if retry_count <= 3:
+                            wait_time = min(2 ** retry_count, 8)  # 2, 4, 8秒
+                        elif retry_count <= 6:
+                            wait_time = 30  # 30秒
+                        else:
+                            wait_time = 60  # 60秒
+                        logger.info(f"⏳ 等待 {wait_time} 秒后重试 (第{retry_count}/{task.max_retries}次)...")
                         await asyncio.sleep(wait_time)
                     else:
                         # 达到最大重试次数，记录失败信息
@@ -2778,7 +2791,10 @@ async def generate_single_chapter_for_batch(
             story_skeleton=chapter_context.story_skeleton or '',
             relevant_memories=chapter_context.relevant_memories or '',
             foreshadow_context=chapter_context.foreshadow_context or '',
-            style_guide=chapter_context.style_guide or ''
+            style_guide=chapter_context.style_guide or '',
+            # 新增：前章摘要和完整大纲上下文
+            previous_chapters_summary=chapter_context.previous_chapters_summary or '',
+            full_outline_context=chapter_context.full_outline_context or ''
         )
     else:
         # 第一章，使用无前置内容模板
@@ -2816,21 +2832,183 @@ async def generate_single_chapter_for_batch(
 确保在整个章节创作过程中始终保持风格的一致性。"""
         logger.info(f"✅ 批量生成 - 已将写作风格注入系统提示词（{len(style_content)}字符）")
     
-    # 非流式生成内容
-    full_content = ""
-    # 准备生成参数
-    generate_kwargs = {
-        "prompt": prompt,
-        "system_prompt": system_prompt_with_style  # 🔑 关键：使用系统提示词传递风格
-    }
-    # 如果传入了自定义模型，使用指定的模型
-    if custom_model:
-        generate_kwargs["model"] = custom_model
-        logger.info(f"  批量生成使用自定义模型: {custom_model}")
+    # === 分段生成方案（优化版）===
+    # 将一章拆成多段生成，每段都传递完整上下文 + 已写全部内容
+    # 充分利用100K上下文窗口，确保连贯性
     
-    # 批量生成中的流式生成（非SSE，不需要修改进度显示）
-    async for chunk in ai_service.generate_text_stream(**generate_kwargs):
-        full_content += chunk
+    # 根据目标字数计算分段
+    if target_word_count <= 5000:
+        # 5000字以下：2段
+        segments = [
+            {"words": int(target_word_count * 0.7), "is_ending": False},
+            {"words": int(target_word_count * 0.3), "is_ending": True},
+        ]
+    elif target_word_count <= 10000:
+        # 5000-10000字：3段
+        segments = [
+            {"words": int(target_word_count * 0.4), "is_ending": False},
+            {"words": int(target_word_count * 0.4), "is_ending": False},
+            {"words": int(target_word_count * 0.2), "is_ending": True},
+        ]
+    else:
+        # 10000字以上：4段
+        segments = [
+            {"words": int(target_word_count * 0.3), "is_ending": False},
+            {"words": int(target_word_count * 0.3), "is_ending": False},
+            {"words": int(target_word_count * 0.25), "is_ending": False},
+            {"words": int(target_word_count * 0.15), "is_ending": True},
+        ]
+    
+    logger.info(f"  📝 分段生成 - 目标{target_word_count}字，分{len(segments)}段: {[s['words'] for s in segments]}")
+    
+    full_content = ""
+    
+    # 保存原始prompt用于后续段落（核心上下文）
+    original_prompt = prompt
+    
+    for seg_idx, segment in enumerate(segments):
+        seg_words = segment["words"]
+        is_ending = segment["is_ending"]
+        seg_num = seg_idx + 1
+        total_segs = len(segments)
+        
+        # 构建分段提示词
+        if seg_idx == 0:
+            # 第一段：使用完整原始prompt
+            seg_prompt = f"""{prompt}
+
+【本段特别要求】
+- 这是第{seg_num}/{total_segs}段，请写约{seg_words}字
+- 写开头和情节发展，展开故事
+- 不要在本段结尾，情节要留有发展空间
+- 不要写"未完待续"等提示语"""
+        else:
+            # 后续段：传递核心上下文 + 已写的全部内容
+            # 构建压缩版核心上下文（保留最重要的信息）
+            core_context = f"""【本章创作任务】
+书名：《{project.title}》
+第{chapter.chapter_number}章《{chapter.title}》
+目标字数：{target_word_count}字
+叙事视角：{project.narrative_perspective or '第三人称'}
+
+【本章大纲 - 必须遵循】
+{chapter_outline_content}
+
+【本章角色】
+{characters_info or '暂无角色信息'}"""
+
+            # 添加伏笔上下文（如果有）
+            if chapter_context.foreshadow_context:
+                core_context += f"""
+
+【伏笔提示】
+{chapter_context.foreshadow_context}"""
+
+            # 添加风格指南（如果有）
+            if chapter_context.style_guide:
+                core_context += f"""
+
+【风格参考】
+{chapter_context.style_guide}"""
+            
+            if is_ending:
+                # 最后一段：专门写结尾，传入已写的全部内容
+                seg_prompt = f"""{core_context}
+
+【已完成内容 - 请仔细阅读后续写】
+{full_content}
+
+【本段要求 - 第{seg_num}/{total_segs}段（结尾段）】
+- 字数：约{seg_words}字
+- 这是本章的最后一段，必须写出完整结尾
+- 推进情节到高潮，然后收尾
+- ⚠️ 必须设置悬念或包袱，让读者想看下一章
+- 结尾示例：突发事件、神秘人物出现、重大发现、生死危机、反转等
+- 确保最后一句是完整的句子（以。！？结尾）
+- 不要重复已写内容，直接续写
+
+请直接续写："""
+            else:
+                # 中间段：继续发展，传入已写的全部内容
+                seg_prompt = f"""{core_context}
+
+【已完成内容 - 请仔细阅读后续写】
+{full_content}
+
+【本段要求 - 第{seg_num}/{total_segs}段】
+- 字数：约{seg_words}字
+- 继续推进情节发展
+- 可以加入对话、心理描写、环境描写
+- 不要在本段结尾，后面还有内容要写
+- 不要写"未完待续"等提示语
+- 不要重复已写内容，直接续写
+
+请直接续写："""
+        
+        # 计算本段max_tokens
+        seg_max_tokens = max(8000, seg_words * 3)
+        
+        seg_kwargs = {
+            "prompt": seg_prompt,
+            "system_prompt": system_prompt_with_style,
+            "max_tokens": seg_max_tokens
+        }
+        if custom_model:
+            seg_kwargs["model"] = custom_model
+        
+        # 生成本段内容
+        seg_content = ""
+        async for chunk in ai_service.generate_text_stream(**seg_kwargs):
+            seg_content += chunk
+        
+        seg_content = seg_content.strip()
+        
+        if seg_content:
+            if full_content:
+                full_content += "\n\n" + seg_content
+            else:
+                full_content = seg_content
+            
+            logger.info(f"    ✅ 第{seg_num}段完成: {len(seg_content)}字 (目标{seg_words}字)")
+        else:
+            logger.warning(f"    ⚠️ 第{seg_num}段生成为空")
+    
+    # 最终检查：确保有完整结尾
+    final_check = full_content[-100:] if len(full_content) > 100 else full_content
+    has_proper_ending = any(final_check.rstrip().endswith(end) for end in ['。', '！', '？', '"', '」', '……'])
+    
+    if not has_proper_ending:
+        logger.warning(f"  ⚠️ 最终检查：结尾不完整，尝试补充...")
+        ending_prompt = f"""请为以下内容写一个完整的结尾（约200字）。
+
+【当前内容结尾】
+{full_content[-500:]}
+
+【要求】
+- 写一个完整的结尾段落
+- 必须设置悬念，吸引读者
+- 最后一句必须是完整句子
+
+请直接写结尾："""
+        
+        ending_kwargs = {
+            "prompt": ending_prompt,
+            "system_prompt": system_prompt_with_style,
+            "max_tokens": 1000
+        }
+        if custom_model:
+            ending_kwargs["model"] = custom_model
+        
+        ending_content = ""
+        async for chunk in ai_service.generate_text_stream(**ending_kwargs):
+            ending_content += chunk
+        
+        if ending_content.strip():
+            full_content += "\n\n" + ending_content.strip()
+            logger.info(f"    ✅ 补充结尾: {len(ending_content)}字")
+    
+    total_words = len(full_content)
+    logger.info(f"  📊 分段生成完成: 总计{total_words}字 (目标{target_word_count}字)")
     
     # 更新章节内容到数据库（使用锁保护）
     async with write_lock:
@@ -2857,8 +3035,260 @@ async def generate_single_chapter_for_batch(
         await db_session.refresh(chapter)
     
     logger.info(f"✅ 单章节生成完成: 第{chapter.chapter_number}章，共 {new_word_count} 字")
+    
+    # === 自动生成章节摘要（用于后续章节的分层上下文）===
+    try:
+        logger.info(f"  📝 开始生成第{chapter.chapter_number}章摘要...")
+        summary_prompt = f"""请为以下章节内容生成一个精炼的摘要（600-800字）。
+
+【要求】
+1. 保留关键情节转折点和重要事件
+2. 记录主要角色的行为、决策和状态变化
+3. 标注埋设的伏笔或悬念
+4. 记录重要对话的核心内容
+5. 保留情感氛围的关键描写
+6. 按时间顺序组织内容
+
+【章节信息】
+第{chapter.chapter_number}章《{chapter.title}》
+
+【章节内容】
+{full_content}
+
+请直接输出摘要，不要添加任何前缀或说明："""
+
+        summary_kwargs = {
+            "prompt": summary_prompt,
+            "max_tokens": 2000
+        }
+        if custom_model:
+            summary_kwargs["model"] = custom_model
+        
+        chapter_summary = ""
+        async for chunk in ai_service.generate_text_stream(**summary_kwargs):
+            chapter_summary += chunk
+        
+        chapter_summary = chapter_summary.strip()
+        
+        if chapter_summary and len(chapter_summary) >= 100:
+            # 保存摘要到数据库
+            async with write_lock:
+                chapter.summary = chapter_summary
+                await db_session.commit()
+            logger.info(f"  ✅ 章节摘要生成完成: {len(chapter_summary)}字")
+        else:
+            logger.warning(f"  ⚠️ 章节摘要生成失败或过短")
+    except Exception as e:
+        logger.error(f"  ❌ 生成章节摘要时出错: {str(e)}")
 
 
+
+
+# ==================== 章节摘要生成API ====================
+
+@router.post("/{chapter_id}/generate-summary", summary="为章节生成摘要")
+async def generate_chapter_summary(
+    chapter_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user_ai_service: AIService = Depends(get_user_ai_service)
+):
+    """
+    为已完成的章节生成摘要，用于后续章节的分层上下文
+    """
+    user_id = getattr(request.state, 'user_id', None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    # 获取章节
+    chapter_result = await db.execute(
+        select(Chapter).where(Chapter.id == chapter_id)
+    )
+    chapter = chapter_result.scalar_one_or_none()
+    
+    if not chapter:
+        raise HTTPException(status_code=404, detail="章节不存在")
+    
+    if not chapter.content or len(chapter.content) < 100:
+        raise HTTPException(status_code=400, detail="章节内容为空或过短")
+    
+    # 验证权限
+    await verify_project_access(chapter.project_id, user_id, db)
+    
+    # 生成摘要
+    summary_prompt = f"""请为以下章节内容生成一个精炼的摘要（600-800字）。
+
+【要求】
+1. 保留关键情节转折点和重要事件
+2. 记录主要角色的行为、决策和状态变化
+3. 标注埋设的伏笔或悬念
+4. 记录重要对话的核心内容
+5. 保留情感氛围的关键描写
+6. 按时间顺序组织内容
+
+【章节信息】
+第{chapter.chapter_number}章《{chapter.title}》
+
+【章节内容】
+{chapter.content}
+
+请直接输出摘要，不要添加任何前缀或说明："""
+
+    try:
+        summary = ""
+        async for chunk in user_ai_service.generate_text_stream(
+            prompt=summary_prompt,
+            max_tokens=2000
+        ):
+            summary += chunk
+        
+        summary = summary.strip()
+        
+        if summary and len(summary) >= 100:
+            chapter.summary = summary
+            await db.commit()
+            logger.info(f"✅ 第{chapter.chapter_number}章摘要生成完成: {len(summary)}字")
+            return {"success": True, "summary_length": len(summary), "chapter_number": chapter.chapter_number}
+        else:
+            raise HTTPException(status_code=500, detail="摘要生成失败或过短")
+    except Exception as e:
+        logger.error(f"❌ 生成摘要出错: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"生成摘要出错: {str(e)}")
+
+
+@router.post("/project/{project_id}/batch-generate-summaries", summary="批量为章节生成摘要")
+async def batch_generate_summaries(
+    project_id: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    批量为项目中已完成但没有摘要的章节生成摘要
+    """
+    user_id = getattr(request.state, 'user_id', None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="未登录")
+    
+    # 验证权限
+    await verify_project_access(project_id, user_id, db)
+    
+    # 获取需要生成摘要的章节
+    result = await db.execute(
+        select(Chapter)
+        .where(Chapter.project_id == project_id)
+        .where(Chapter.status == "completed")
+        .where(Chapter.content.isnot(None))
+        .where(Chapter.content != "")
+        .where((Chapter.summary == None) | (Chapter.summary == ""))
+        .order_by(Chapter.chapter_number)
+    )
+    chapters = result.scalars().all()
+    
+    if not chapters:
+        return {"success": True, "message": "所有章节都已有摘要", "count": 0}
+    
+    chapter_ids = [ch.id for ch in chapters]
+    chapter_numbers = [ch.chapter_number for ch in chapters]
+    
+    # 在后台任务中生成摘要
+    background_tasks.add_task(
+        _batch_generate_summaries_task,
+        project_id,
+        chapter_ids,
+        user_id
+    )
+    
+    return {
+        "success": True,
+        "message": f"已启动批量摘要生成任务",
+        "count": len(chapters),
+        "chapters": chapter_numbers
+    }
+
+
+async def _batch_generate_summaries_task(project_id: str, chapter_ids: list, user_id: str):
+    """后台任务：批量生成摘要"""
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from app.database import get_engine
+    from app.models.settings import Settings
+    from app.api.settings import create_user_ai_service, read_env_defaults
+    
+    # 获取数据库引擎并创建会话
+    engine = await get_engine(user_id)
+    AsyncSessionLocal = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False
+    )
+    
+    async with AsyncSessionLocal() as db:
+        # 获取用户的AI设置
+        result = await db.execute(
+            select(Settings).where(Settings.user_id == user_id)
+        )
+        settings = result.scalar_one_or_none()
+        
+        if not settings:
+            # 使用默认设置
+            env_defaults = read_env_defaults()
+            settings = Settings(user_id=user_id, **env_defaults)
+            db.add(settings)
+            await db.commit()
+            await db.refresh(settings)
+        
+        # 使用用户设置创建AI服务
+        ai_service = create_user_ai_service(
+            api_provider=settings.api_provider,
+            api_key=settings.api_key,
+            api_base_url=settings.api_base_url or "",
+            model_name=settings.llm_model,
+            temperature=settings.temperature or 0.7,
+            max_tokens=settings.max_tokens or 4096,
+            system_prompt=settings.system_prompt
+        )
+        
+        for chapter_id in chapter_ids:
+            try:
+                result = await db.execute(
+                    select(Chapter).where(Chapter.id == chapter_id)
+                )
+                chapter = result.scalar_one_or_none()
+                
+                if not chapter or not chapter.content:
+                    continue
+                
+                logger.info(f"📝 批量生成摘要: 第{chapter.chapter_number}章...")
+                
+                summary_prompt = f"""请为以下章节生成精炼摘要（600-800字）。
+保留：关键情节、角色变化、伏笔悬念、重要对话。
+
+第{chapter.chapter_number}章《{chapter.title}》
+
+{chapter.content}
+
+直接输出摘要："""
+
+                summary = ""
+                async for chunk in ai_service.generate_text_stream(
+                    prompt=summary_prompt,
+                    max_tokens=2000
+                ):
+                    summary += chunk
+                
+                summary = summary.strip()
+                
+                if summary and len(summary) >= 100:
+                    chapter.summary = summary
+                    await db.commit()
+                    logger.info(f"  ✅ 第{chapter.chapter_number}章摘要: {len(summary)}字")
+                else:
+                    logger.warning(f"  ⚠️ 第{chapter.chapter_number}章摘要生成失败")
+                    
+            except Exception as e:
+                logger.error(f"  ❌ 第{chapter.chapter_number if chapter else '?'}章摘要出错: {str(e)}")
+    
+    logger.info(f"✅ 批量摘要生成任务完成: {project_id}")
 
 
 # ==================== 章节重新生成相关API ====================

@@ -85,17 +85,17 @@ class ChapterGenerateRequest(BaseModel):
 class BatchGenerateRequest(BaseModel):
     """批量生成章节的请求模型"""
     start_chapter_number: int = Field(..., description="起始章节序号")
-    count: int = Field(..., description="生成章节数量", ge=1, le=20)
+    count: int = Field(..., description="生成章节数量", ge=1, le=100)
     style_id: Optional[int] = Field(None, description="写作风格ID")
     target_word_count: Optional[int] = Field(
-        3000,
-        description="目标字数，默认3000字",
+        10000,
+        description="目标字数，默认10000字",
         ge=500,
-        le=10000
+        le=20000
     )
     enable_analysis: bool = Field(False, description="是否启用同步分析")
     enable_mcp: bool = Field(True, description="是否启用MCP工具增强（搜索参考资料）")
-    max_retries: int = Field(3, description="每个章节的最大重试次数", ge=0, le=5)
+    max_retries: int = Field(10, description="每个章节的最大重试次数", ge=0, le=20)
     model: Optional[str] = Field(None, description="指定使用的AI模型，不提供则使用用户默认模型")
 
 
