@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "mumuai-novel": {
+      "command": "python",
+      "args": ["/path/to/MuMuAINovel/mcp_novel_server.py"],
+      "env": {
+        "MUMUAI_BASE_URL": "http://localhost:8000",
+        "MUMUAI_USERNAME": "admin",
+        "MUMUAI_PASSWORD": "your_password"
+      }
+    }
+  }
+}

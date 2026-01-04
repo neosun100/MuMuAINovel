@@ -243,6 +243,67 @@ export MUMUAI_PASSWORD=your_password
 
 ---
 
+## 🔌 MCP Server (AI Assistant Integration)
+
+MuMuAINovel provides an MCP (Model Context Protocol) server that allows AI assistants like Claude and Kiro to directly create novels.
+
+### Installation
+
+```bash
+pip install mcp httpx
+```
+
+### Configuration (Claude Desktop)
+
+Edit `~/.config/claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mumuai-novel": {
+      "command": "python",
+      "args": ["/path/to/MuMuAINovel/mcp_novel_server.py"],
+      "env": {
+        "MUMUAI_BASE_URL": "http://localhost:8000",
+        "MUMUAI_USERNAME": "admin",
+        "MUMUAI_PASSWORD": "your_password"
+      }
+    }
+  }
+}
+```
+
+### Available MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `novel_list_projects` | List all novel projects |
+| `novel_create_project` | Create new project |
+| `novel_create_characters_batch` | Batch create characters |
+| `novel_create_outlines_batch` | Batch create outlines |
+| `novel_batch_generate` | Submit batch generation |
+| `novel_check_progress` | Check generation progress |
+| `novel_resume_all` | Resume all interrupted tasks |
+| `novel_full_pipeline` | One-click create complete novel |
+
+### Usage Example
+
+```
+User: Create a sci-fi novel "Star Conqueror" with protagonist Jack Chen...
+
+AI: [Calls novel_full_pipeline with characters and outlines]
+    ✅ Project created
+    ✅ 100 characters created
+    ✅ 100 outlines created
+    ✅ Batch generation submitted
+    
+    Your novel is being generated in the background!
+```
+
+See [docs/MCP_USAGE_GUIDE.md](docs/MCP_USAGE_GUIDE.md) for detailed documentation.
+
+---
+
 ## 🏗️ Tech Stack
 
 | Layer | Technology |

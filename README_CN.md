@@ -243,6 +243,67 @@ export MUMUAI_PASSWORD=your_password
 
 ---
 
+## 🔌 MCP Server（AI助手集成）
+
+MuMuAINovel 提供 MCP (Model Context Protocol) 服务器，让 Claude、Kiro 等AI助手可以直接创作小说。
+
+### 安装
+
+```bash
+pip install mcp httpx
+```
+
+### 配置（Claude Desktop）
+
+编辑 `~/.config/claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mumuai-novel": {
+      "command": "python",
+      "args": ["/path/to/MuMuAINovel/mcp_novel_server.py"],
+      "env": {
+        "MUMUAI_BASE_URL": "http://localhost:8000",
+        "MUMUAI_USERNAME": "admin",
+        "MUMUAI_PASSWORD": "your_password"
+      }
+    }
+  }
+}
+```
+
+### 可用MCP工具
+
+| 工具 | 说明 |
+|------|------|
+| `novel_list_projects` | 列出所有小说项目 |
+| `novel_create_project` | 创建新项目 |
+| `novel_create_characters_batch` | 批量创建角色 |
+| `novel_create_outlines_batch` | 批量创建大纲 |
+| `novel_batch_generate` | 提交批量生成 |
+| `novel_check_progress` | 检查生成进度 |
+| `novel_resume_all` | 恢复所有中断任务 |
+| `novel_full_pipeline` | 一键创建完整小说 |
+
+### 使用示例
+
+```
+用户: 帮我创建一部科幻小说《星际征服者》，主角Jack Chen...
+
+AI: [调用 novel_full_pipeline]
+    ✅ 项目创建成功
+    ✅ 100个角色创建完成
+    ✅ 100章大纲创建完成
+    ✅ 批量生成已提交
+    
+    您的小说正在后台生成中！
+```
+
+详细文档请参阅 [docs/MCP_USAGE_GUIDE.md](docs/MCP_USAGE_GUIDE.md)。
+
+---
+
 ## 🏗️ 技术栈
 
 | 层级 | 技术 |
