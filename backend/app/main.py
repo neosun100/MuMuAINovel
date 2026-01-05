@@ -26,10 +26,17 @@ logger = get_logger(__name__)
 
 async def resume_interrupted_tasks():
     """恢复中断的批量生成任务"""
-    from app.database import AsyncSessionLocal
+    from app.database import AsyncSessionLocal, _init_global_session
     from app.models.batch_generation_task import BatchGenerationTask
     from app.models.chapter import Chapter
     from sqlalchemy import select, and_
+    
+    # 初始化全局会话
+    await _init_global_session()
+    
+    if AsyncSessionLocal is None:
+        logger.warning("AsyncSessionLocal未初始化，跳过任务恢复")
+        return
     
     try:
         async with AsyncSessionLocal() as db:

@@ -21,7 +21,8 @@ from app.models import (
     Settings, WritingStyle, ProjectDefaultStyle,
     RelationshipType, CharacterRelationship, Organization, OrganizationMember,
     StoryMemory, PlotAnalysis, AnalysisTask, BatchGenerationTask,
-    RegenerationTask, Career, CharacterCareer, User, MCPPlugin, PromptTemplate
+    RegenerationTask, Career, CharacterCareer, User, MCPPlugin, PromptTemplate,
+    ChapterRefinement
 )
 
 # 引擎缓存：每个用户一个引擎
@@ -40,6 +41,27 @@ _session_stats = {
     "generator_exits": 0,
     "last_check": None
 }
+
+# 全局 AsyncSessionLocal（用于启动时的任务恢复等）
+_global_engine = None
+AsyncSessionLocal = None
+
+
+async def _init_global_session():
+    """初始化全局会话工厂"""
+    global _global_engine, AsyncSessionLocal
+    if _global_engine is None:
+        _global_engine = create_async_engine(
+            settings.database_url,
+            pool_size=5,
+            max_overflow=5,
+            pool_pre_ping=True
+        )
+        AsyncSessionLocal = async_sessionmaker(
+            _global_engine,
+            class_=AsyncSession,
+            expire_on_commit=False
+        )
 
 
 async def get_engine(user_id: str):

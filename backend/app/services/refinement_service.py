@@ -554,7 +554,7 @@ class ChapterRefinementService:
         # 2. 涉及角色
         characters = await self._get_characters(project.id)
         if characters:
-            char_list = [f"- {c.name}: {c.role or ''}，{c.description[:100] if c.description else ''}" 
+            char_list = [f"- {c.name}: {c.role_type or ''}，{c.personality[:100] if c.personality else ''}" 
                         for c in characters[:10]]
             context["characters"] = "\n".join(char_list)
         else:
