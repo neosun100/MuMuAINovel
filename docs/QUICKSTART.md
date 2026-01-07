@@ -38,6 +38,7 @@
 |------|------|----------|
 | **QUICKSTART.md** | 本文档，入口指南 | 🔴 必读 |
 | **COMPLETE_USAGE_GUIDE.md** | 完整使用指南（含二次优化） | 🔴 必读 |
+| **AI_NOVEL_CREATION_PROMPT.md** | AI创作Prompt模板（15种类型） | 🔴 AI助手必读 |
 | **KIRO_INTERACTION_GUIDE.md** | 完整API交互指南 | 需要了解API细节时 |
 | **API_MCP_COVERAGE.md** | API和MCP覆盖清单 | 需要查看功能覆盖时 |
 | **MCP_USAGE_GUIDE.md** | MCP Server使用指南 | 配置MCP时 |
