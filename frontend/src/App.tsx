@@ -15,6 +15,7 @@ import Chapters from './pages/Chapters';
 import ChapterReader from './pages/ChapterReader';
 import ChapterAnalysis from './pages/ChapterAnalysis';
 import WritingStyles from './pages/WritingStyles';
+import RefinementReview from './pages/RefinementReview';
 import Settings from './pages/Settings';
 import MCPPlugins from './pages/MCPPlugins';
 import UserManagement from './pages/UserManagement';
@@ -60,6 +61,7 @@ function App() {
             <Route path="chapters" element={<Chapters />} />
             <Route path="chapter-analysis" element={<ChapterAnalysis />} />
             <Route path="writing-styles" element={<WritingStyles />} />
+            <Route path="refinement-review" element={<RefinementReview />} />
             <Route path="sponsor" element={<Sponsor />} />
             {/* <Route path="polish" element={<Polish />} /> */}
           </Route>

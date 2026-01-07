@@ -514,6 +514,67 @@ async def list_tools() -> List[Tool]:
             }
         ),
         
+        # ============ 审核与导出 ============
+        Tool(
+            name="novel_review_chapter",
+            description="审核章节优化结果",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "chapter_id": {"type": "string", "description": "章节ID"},
+                    "status": {"type": "string", "enum": ["approved", "rejected", "pending"], "description": "审核状态"},
+                    "comment": {"type": "string", "description": "审核备注（可选）"}
+                },
+                "required": ["chapter_id", "status"]
+            }
+        ),
+        Tool(
+            name="novel_review_summary",
+            description="获取项目审核统计",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "项目ID"}
+                },
+                "required": ["project_id"]
+            }
+        ),
+        Tool(
+            name="novel_export",
+            description="导出优化后的小说。支持txt/markdown/json格式，可选包含原文对比。",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "项目ID"},
+                    "format": {"type": "string", "enum": ["txt", "markdown", "json"], "default": "txt", "description": "导出格式"},
+                    "include_original": {"type": "boolean", "default": False, "description": "是否包含原文（会生成ZIP）"}
+                },
+                "required": ["project_id"]
+            }
+        ),
+        Tool(
+            name="novel_export_diff_report",
+            description="导出优化对比报告（Markdown格式）",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string", "description": "项目ID"}
+                },
+                "required": ["project_id"]
+            }
+        ),
+        Tool(
+            name="novel_get_diff",
+            description="获取单章优化前后对比",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "chapter_id": {"type": "string", "description": "章节ID"}
+                },
+                "required": ["chapter_id"]
+            }
+        ),
+        
         # ============ 一键Pipeline ============
         Tool(
             name="novel_full_pipeline",
@@ -858,6 +919,88 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
 
 章节: 第{result.get('chapter_number')}章
 字数: {result.get('word_count')}
+""")]
+        
+        elif name == "novel_review_chapter":
+            chapter_id = arguments["chapter_id"]
+            status = arguments["status"]
+            comment = arguments.get("comment", "")
+            
+            result = await client.request("post", f"/api/refinement/chapter/{chapter_id}/review", 
+                json={"status": status, "comment": comment})
+            
+            status_text = {"approved": "✅ 已通过", "rejected": "❌ 需修改", "pending": "⏳ 待审核"}
+            return [TextContent(type="text", text=f"""{status_text.get(status, status)}
+
+章节ID: {chapter_id}
+审核状态: {status}
+备注: {comment or '无'}
+""")]
+        
+        elif name == "novel_review_summary":
+            project_id = arguments["project_id"]
+            result = await client.request("get", f"/api/refinement/project/{project_id}/review-summary")
+            
+            return [TextContent(type="text", text=f"""📊 审核统计
+
+总章节: {result.get('total', 0)}
+✅ 已通过: {result.get('approved', 0)}
+❌ 需修改: {result.get('rejected', 0)}
+⏳ 待审核: {result.get('pending', 0)}
+""")]
+        
+        elif name == "novel_export":
+            project_id = arguments["project_id"]
+            fmt = arguments.get("format", "txt")
+            include_original = arguments.get("include_original", False)
+            
+            url = f"{BASE_URL}/api/refinement/project/{project_id}/export?format={fmt}"
+            if include_original:
+                url += "&include_original=true"
+            
+            return [TextContent(type="text", text=f"""📥 导出链接已生成
+
+请访问以下链接下载:
+{url}
+
+格式: {fmt.upper()}
+包含原文: {'是' if include_original else '否'}
+""")]
+        
+        elif name == "novel_export_diff_report":
+            project_id = arguments["project_id"]
+            url = f"{BASE_URL}/api/refinement/project/{project_id}/export-diff"
+            
+            return [TextContent(type="text", text=f"""📊 对比报告链接已生成
+
+请访问以下链接下载:
+{url}
+""")]
+        
+        elif name == "novel_get_diff":
+            chapter_id = arguments["chapter_id"]
+            result = await client.request("get", f"/api/refinement/chapter/{chapter_id}/diff")
+            
+            if "error" in result:
+                return [TextContent(type="text", text=f"❌ 未找到优化记录")]
+            
+            orig = result.get("original_word_count", 0)
+            ref = result.get("refined_word_count", 0)
+            change = ref - orig
+            
+            segments_info = []
+            for seg in result.get("segments", []):
+                segments_info.append(f"  第{seg['segment']}段: {seg['original_words']}→{seg['refined_words']}字")
+            
+            return [TextContent(type="text", text=f"""📝 第{result.get('chapter_number')}章 优化对比
+
+原文字数: {orig}
+优化后字数: {ref} ({'+' if change > 0 else ''}{change})
+使用模型: {result.get('model_used', 'N/A')}
+状态: {result.get('status')}
+
+分段详情:
+{chr(10).join(segments_info)}
 """)]
         
         elif name == "novel_full_pipeline":

@@ -16,6 +16,7 @@ import {
   FundOutlined,
   HeartOutlined,
   TrophyOutlined,
+  CheckSquareOutlined,
 } from '@ant-design/icons';
 import { useStore } from '../store';
 import { useCharacterSync, useOutlineSync, useChapterSync } from '../store/hooks';
@@ -145,6 +146,11 @@ export default function ProjectDetail() {
       icon: <EditOutlined />,
       label: <Link to={`/project/${projectId}/writing-styles`}>写作风格</Link>,
     },
+    {
+      key: 'refinement-review',
+      icon: <CheckSquareOutlined />,
+      label: <Link to={`/project/${projectId}/refinement-review`}>优化审核</Link>,
+    },
     // {
     //   key: 'polish',
     //   icon: <ToolOutlined />,
@@ -164,6 +170,7 @@ export default function ProjectDetail() {
     if (path.includes('/chapter-analysis')) return 'chapter-analysis';
     if (path.includes('/chapters')) return 'chapters';
     if (path.includes('/writing-styles')) return 'writing-styles';
+    if (path.includes('/refinement-review')) return 'refinement-review';
     if (path.includes('/sponsor')) return 'sponsor';
     // if (path.includes('/polish')) return 'polish';
     return 'sponsor'; // 默认选中赞助支持

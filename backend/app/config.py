@@ -129,10 +129,10 @@ config_logger.debug(f"AI提供商: {settings.default_ai_provider}")
 class RefinementConfig:
     """二次优化配置"""
     
-    # 可用模型
+    # 可用模型 (使用非thinking版本，响应更快，避免网关超时)
     AVAILABLE_MODELS = {
-        "opus": "bedrock/anthropic.claude-opus-4-5-20251101-v1:0-64k-thinking",
-        "sonnet": "bedrock/anthropic.claude-sonnet-4.5-20250929-v1:0-64k-1M-thinking"
+        "opus": "bedrock/anthropic.claude-opus-4-5-20251101-v1:0-64k",
+        "sonnet": "bedrock/anthropic.claude-sonnet-4.5-20250929-v1:0-64k-1M"
     }
     
     @classmethod

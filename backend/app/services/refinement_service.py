@@ -507,32 +507,71 @@ class ChapterRefinementService:
         result = await self._call_model(prompt, model)
         return self._clean_output(result)
     
-    async def _call_model(self, prompt: str, model: str) -> str:
-        """调用LiteLLM模型"""
+    async def _call_model(self, prompt: str, model: str, max_retries: int = 3) -> str:
+        """调用LiteLLM模型，使用流式响应避免网关超时"""
         
         api_base = RefinementConfig.get_api_base()
         api_key = RefinementConfig.get_api_key()
         
-        async with httpx.AsyncClient(timeout=300) as client:
-            response = await client.post(
-                api_base,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 8000,
-                    "temperature": 0.3
-                }
-            )
-            
-            if response.status_code != 200:
-                raise Exception(f"API调用失败: {response.status_code} - {response.text}")
-            
-            result = response.json()
-            return result["choices"][0]["message"]["content"]
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=30.0)) as client:
+                    async with client.stream(
+                        "POST",
+                        api_base,
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json"
+                        },
+                        json={
+                            "model": model,
+                            "messages": [{"role": "user", "content": prompt}],
+                            "max_tokens": 8000,
+                            "temperature": 0.3,
+                            "stream": True
+                        }
+                    ) as response:
+                        if response.status_code != 200:
+                            error_text = await response.aread()
+                            if response.status_code in [502, 503, 504]:
+                                logger.warning(f"API网关错误 (尝试 {attempt+1}/{max_retries}): {response.status_code}")
+                                if attempt < max_retries - 1:
+                                    await asyncio.sleep(5 * (attempt + 1))
+                                    continue
+                            raise Exception(f"API调用失败: {response.status_code} - {error_text.decode()[:500]}")
+                        
+                        # 收集流式响应
+                        content_parts = []
+                        async for line in response.aiter_lines():
+                            if line.startswith("data: "):
+                                data = line[6:]
+                                if data == "[DONE]":
+                                    break
+                                try:
+                                    import json
+                                    chunk = json.loads(data)
+                                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                                    if "content" in delta and delta["content"]:
+                                        content_parts.append(delta["content"])
+                                except:
+                                    pass
+                        
+                        return "".join(content_parts)
+                    
+            except httpx.TimeoutException:
+                logger.warning(f"请求超时 (尝试 {attempt+1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(5 * (attempt + 1))
+                    continue
+                raise Exception("API请求超时，已重试3次")
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"请求异常 (尝试 {attempt+1}/{max_retries}): {e}")
+                    await asyncio.sleep(5 * (attempt + 1))
+                    continue
+                raise
+        
+        raise Exception("API调用失败，已达最大重试次数")
     
     async def _build_fixed_context(
         self,

@@ -236,7 +236,10 @@ async def get_refinement_diff(
     
     result = await db.execute(
         select(ChapterRefinement)
-        .where(ChapterRefinement.chapter_id == chapter_id)
+        .where(
+            ChapterRefinement.chapter_id == chapter_id,
+            ChapterRefinement.status == "completed"
+        )
         .order_by(ChapterRefinement.version.desc())
         .limit(1)
     )
@@ -365,3 +368,274 @@ async def list_refined_chapters(
             for ch in chapters
         ]
     }
+
+
+# ==================== 审核功能 ====================
+
+class ReviewRequest(BaseModel):
+    status: str  # approved / rejected / pending
+    comment: Optional[str] = None
+
+
+@router.post("/chapter/{chapter_id}/review")
+async def review_chapter(
+    chapter_id: str,
+    request: ReviewRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """审核章节优化结果"""
+    
+    # 查找已完成的优化记录
+    result = await db.execute(
+        select(ChapterRefinement)
+        .where(
+            ChapterRefinement.chapter_id == chapter_id,
+            ChapterRefinement.status == "completed"
+        )
+        .order_by(ChapterRefinement.version.desc())
+        .limit(1)
+    )
+    refinement = result.scalar_one_or_none()
+    
+    if not refinement:
+        raise HTTPException(status_code=404, detail="未找到已完成的优化记录")
+    
+    refinement.review_status = request.status
+    refinement.review_comment = request.comment
+    refinement.reviewed_at = datetime.now()
+    
+    await db.commit()
+    
+    return {
+        "chapter_id": chapter_id,
+        "review_status": request.status,
+        "message": "审核完成"
+    }
+
+
+@router.get("/project/{project_id}/review-summary")
+async def get_review_summary(
+    project_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """获取项目审核统计"""
+    
+    result = await db.execute(
+        select(
+            ChapterRefinement.review_status,
+            func.count(ChapterRefinement.id)
+        )
+        .where(
+            ChapterRefinement.project_id == project_id,
+            ChapterRefinement.status == "completed"
+        )
+        .group_by(ChapterRefinement.review_status)
+    )
+    counts = {row[0] or "pending": row[1] for row in result.all()}
+    
+    return {
+        "total": sum(counts.values()),
+        "approved": counts.get("approved", 0),
+        "rejected": counts.get("rejected", 0),
+        "pending": counts.get("pending", 0) + counts.get(None, 0)
+    }
+
+
+# ==================== 导出功能 ====================
+
+from fastapi.responses import StreamingResponse
+import io
+import zipfile
+import json as json_lib
+from urllib.parse import quote
+
+
+@router.get("/project/{project_id}/export")
+async def export_refined_novel(
+    project_id: str,
+    format: str = "txt",  # txt / markdown / json
+    include_original: bool = False,
+    db: AsyncSession = Depends(get_db)
+):
+    """导出优化后的小说"""
+    
+    # 获取项目信息
+    from app.models.project import Project
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    # 获取所有章节
+    result = await db.execute(
+        select(Chapter)
+        .where(Chapter.project_id == project_id)
+        .order_by(Chapter.chapter_number)
+    )
+    chapters = result.scalars().all()
+    
+    if format == "json":
+        # JSON格式导出
+        data = {
+            "title": project.title,
+            "genre": project.genre,
+            "description": project.description,
+            "total_chapters": len(chapters),
+            "total_words": sum(ch.word_count or 0 for ch in chapters),
+            "chapters": [
+                {
+                    "number": ch.chapter_number,
+                    "title": ch.title,
+                    "content": ch.content,
+                    "word_count": ch.word_count,
+                    "is_refined": ch.is_refined
+                }
+                for ch in chapters
+            ]
+        }
+        
+        content = json_lib.dumps(data, ensure_ascii=False, indent=2)
+        filename = f"{project.title}.json"
+        media_type = "application/json"
+        
+    elif format == "markdown":
+        # Markdown格式
+        lines = [f"# {project.title}\n\n"]
+        if project.description:
+            lines.append(f"> {project.description}\n\n")
+        lines.append("---\n\n")
+        
+        for ch in chapters:
+            lines.append(f"## {ch.title}\n\n")
+            lines.append(f"{ch.content or ''}\n\n")
+            lines.append("---\n\n")
+        
+        content = "".join(lines)
+        filename = f"{project.title}.md"
+        media_type = "text/markdown"
+        
+    else:
+        # TXT格式
+        lines = [f"{project.title}\n", "=" * 50 + "\n\n"]
+        
+        for ch in chapters:
+            lines.append(f"{ch.title}\n")
+            lines.append("-" * 30 + "\n\n")
+            lines.append(f"{ch.content or ''}\n\n\n")
+        
+        content = "".join(lines)
+        filename = f"{project.title}.txt"
+        media_type = "text/plain"
+    
+    # 如果需要包含原文对比，创建ZIP
+    if include_original:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            # 优化后版本
+            zf.writestr(f"refined/{filename}", content.encode('utf-8'))
+            
+            # 原文版本
+            result = await db.execute(
+                select(ChapterRefinement)
+                .where(
+                    ChapterRefinement.project_id == project_id,
+                    ChapterRefinement.status == "completed"
+                )
+                .order_by(ChapterRefinement.chapter_number)
+            )
+            refinements = result.scalars().all()
+            
+            original_lines = [f"{project.title} (原文)\n", "=" * 50 + "\n\n"]
+            for ref in refinements:
+                original_lines.append(f"第{ref.chapter_number}章\n")
+                original_lines.append("-" * 30 + "\n\n")
+                original_lines.append(f"{ref.original_content or ''}\n\n\n")
+            
+            zf.writestr(f"original/{project.title}_原文.txt", "".join(original_lines).encode('utf-8'))
+        
+        buffer.seek(0)
+        encoded_filename = quote(f"{project.title}.zip")
+        return StreamingResponse(
+            buffer,
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
+        )
+    
+    encoded_filename = quote(filename)
+    return StreamingResponse(
+        io.BytesIO(content.encode('utf-8')),
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
+    )
+
+
+@router.get("/project/{project_id}/export-diff")
+async def export_diff_report(
+    project_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """导出优化对比报告"""
+    
+    from app.models.project import Project
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    result = await db.execute(
+        select(ChapterRefinement)
+        .where(
+            ChapterRefinement.project_id == project_id,
+            ChapterRefinement.status == "completed"
+        )
+        .order_by(ChapterRefinement.chapter_number)
+    )
+    refinements = result.scalars().all()
+    
+    lines = [
+        f"# {project.title} - 优化对比报告\n\n",
+        f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n",
+        "---\n\n"
+    ]
+    
+    total_original = 0
+    total_refined = 0
+    
+    for ref in refinements:
+        orig_words = ref.original_word_count or 0
+        ref_words = ref.refined_word_count or 0
+        total_original += orig_words
+        total_refined += ref_words
+        
+        change = ref_words - orig_words
+        change_pct = (change / orig_words * 100) if orig_words > 0 else 0
+        
+        lines.append(f"## 第{ref.chapter_number}章\n\n")
+        lines.append(f"- 原文字数: {orig_words}\n")
+        lines.append(f"- 优化后字数: {ref_words}\n")
+        lines.append(f"- 变化: {change:+d} ({change_pct:+.1f}%)\n")
+        lines.append(f"- 审核状态: {ref.review_status or '待审核'}\n\n")
+        
+        # 显示前300字对比
+        lines.append("### 开头对比\n\n")
+        lines.append("**原文:**\n")
+        lines.append(f"```\n{(ref.segment1_original or '')[:300]}...\n```\n\n")
+        lines.append("**优化后:**\n")
+        lines.append(f"```\n{(ref.segment1_refined or '')[:300]}...\n```\n\n")
+        lines.append("---\n\n")
+    
+    # 总结
+    lines.insert(3, f"## 总体统计\n\n")
+    lines.insert(4, f"- 总章节: {len(refinements)}\n")
+    lines.insert(5, f"- 原文总字数: {total_original:,}\n")
+    lines.insert(6, f"- 优化后总字数: {total_refined:,}\n")
+    lines.insert(7, f"- 总变化: {total_refined - total_original:+,} ({(total_refined - total_original) / total_original * 100 if total_original > 0 else 0:+.1f}%)\n\n")
+    
+    content = "".join(lines)
+    encoded_filename = quote(f"{project.title}_对比报告.md")
+    
+    return StreamingResponse(
+        io.BytesIO(content.encode('utf-8')),
+        media_type="text/markdown",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
+    )

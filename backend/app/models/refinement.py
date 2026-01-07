@@ -51,5 +51,10 @@ class ChapterRefinement(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment="更新时间")
     completed_at = Column(DateTime, nullable=True, comment="完成时间")
     
+    # 审核状态
+    review_status = Column(String(20), nullable=True, comment="审核状态: approved/rejected/pending")
+    review_comment = Column(Text, nullable=True, comment="审核备注")
+    reviewed_at = Column(DateTime, nullable=True, comment="审核时间")
+    
     def __repr__(self):
         return f"<ChapterRefinement(id={self.id}, chapter_number={self.chapter_number}, status={self.status})>"
