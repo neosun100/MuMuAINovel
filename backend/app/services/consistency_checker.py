@@ -1,5 +1,5 @@
-"""一致性检测服务 - 检测角色、情节、世界观的一致性"""
-from typing import Dict, Any, List, Optional
+"""一致性检测服务 - 检测角色、情节、世界观的一致性，支持流式返回"""
+from typing import Dict, Any, List, Optional, AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import json
@@ -265,3 +265,57 @@ class ConsistencyChecker:
         results["overall_score"] = sum(scores) / len(scores) if scores else 100
         
         return results
+
+    async def full_consistency_check_stream(
+        self,
+        chapter: Chapter,
+        project: Project,
+        characters: List[Character],
+        previous_chapters: List[Chapter]
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """流式完整一致性检测"""
+        yield {
+            "type": "start",
+            "chapter_id": chapter.id,
+            "chapter_number": chapter.chapter_number,
+            "message": "开始一致性检测..."
+        }
+        
+        character_result = None
+        plot_result = None
+        
+        # 阶段1: 角色一致性检测
+        if characters:
+            yield {"type": "progress", "step": "character", "message": "正在检测角色一致性..."}
+            character_result = await self.check_character_consistency(
+                chapter.content or "", characters, project
+            )
+            yield {"type": "character_result", "data": character_result}
+        else:
+            yield {"type": "progress", "step": "character", "message": "无角色设定，跳过角色检测"}
+        
+        # 阶段2: 情节连贯性检测
+        if previous_chapters:
+            yield {"type": "progress", "step": "plot", "message": "正在检测情节连贯性..."}
+            plot_result = await self.check_plot_coherence(chapter, previous_chapters, project)
+            yield {"type": "plot_result", "data": plot_result}
+        else:
+            yield {"type": "progress", "step": "plot", "message": "无前置章节，跳过情节检测"}
+        
+        # 计算综合评分
+        scores = []
+        if character_result and character_result.get("score", -1) >= 0:
+            scores.append(character_result["score"])
+        if plot_result and plot_result.get("score", -1) >= 0:
+            scores.append(plot_result["score"])
+        
+        overall_score = sum(scores) / len(scores) if scores else 100
+        
+        yield {
+            "type": "complete",
+            "chapter_id": chapter.id,
+            "chapter_number": chapter.chapter_number,
+            "character_consistency": character_result,
+            "plot_coherence": plot_result,
+            "overall_score": round(overall_score, 1)
+        }

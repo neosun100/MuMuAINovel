@@ -1,5 +1,5 @@
-"""重复内容检测服务"""
-from typing import Dict, Any, List, Tuple
+"""重复内容检测服务 - 支持流式返回"""
+from typing import Dict, Any, List, AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import re
@@ -22,7 +22,6 @@ class DuplicateDetector:
         if not content:
             return []
         
-        # 按句子分割
         sentences = re.split(r'[。！？\n]', content)
         segments = []
         
@@ -39,11 +38,7 @@ class DuplicateDetector:
             return 0.0
         return SequenceMatcher(None, text1, text2).ratio()
     
-    def find_duplicates_in_chapter(
-        self,
-        content: str,
-        min_length: int = 30
-    ) -> List[Dict[str, Any]]:
+    def find_duplicates_in_chapter(self, content: str, min_length: int = 30) -> List[Dict[str, Any]]:
         """检测章节内部重复"""
         segments = self.extract_segments(content, min_length)
         duplicates = []
@@ -84,8 +79,8 @@ class DuplicateDetector:
         segments2 = self.extract_segments(content2, min_length)
         duplicates = []
         
-        for i, seg1 in enumerate(segments1):
-            for j, seg2 in enumerate(segments2):
+        for seg1 in segments1:
+            for seg2 in segments2:
                 similarity = self.calculate_similarity(seg1, seg2)
                 if similarity >= self.threshold:
                     duplicates.append({
@@ -98,15 +93,9 @@ class DuplicateDetector:
         
         return duplicates
     
-    async def check_chapter(
-        self,
-        chapter_id: str,
-        db: AsyncSession
-    ) -> Dict[str, Any]:
+    async def check_chapter(self, chapter_id: str, db: AsyncSession) -> Dict[str, Any]:
         """检测单章节内部重复"""
-        result = await db.execute(
-            select(Chapter).where(Chapter.id == chapter_id)
-        )
+        result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
         chapter = result.scalar_one_or_none()
         
         if not chapter or not chapter.content:
@@ -122,13 +111,8 @@ class DuplicateDetector:
             "has_issues": len(duplicates) > 0
         }
     
-    async def check_project(
-        self,
-        project_id: str,
-        db: AsyncSession,
-        max_chapters: int = 20
-    ) -> Dict[str, Any]:
-        """检测项目所有章节间重复"""
+    async def check_project(self, project_id: str, db: AsyncSession, max_chapters: int = 20) -> Dict[str, Any]:
+        """检测项目所有章节间重复（同步版本）"""
         result = await db.execute(
             select(Chapter).where(
                 Chapter.project_id == project_id,
@@ -144,17 +128,15 @@ class DuplicateDetector:
         cross_duplicates = []
         internal_issues = []
         
-        # 检测每章内部重复
         for ch in chapters:
             internal = self.find_duplicates_in_chapter(ch.content)
             if internal:
                 internal_issues.append({
                     "chapter_number": ch.chapter_number,
                     "chapter_title": ch.title,
-                    "duplicates": internal[:5]  # 限制数量
+                    "duplicates": internal[:5]
                 })
         
-        # 检测章节间重复
         for i, ch1 in enumerate(chapters):
             for j, ch2 in enumerate(chapters):
                 if i >= j:
@@ -165,13 +147,95 @@ class DuplicateDetector:
                     {"number": ch1.chapter_number, "title": ch1.title},
                     {"number": ch2.chapter_number, "title": ch2.title}
                 )
-                cross_duplicates.extend(cross[:3])  # 限制每对章节的数量
+                cross_duplicates.extend(cross[:3])
         
         return {
             "project_id": project_id,
             "chapters_checked": len(chapters),
             "internal_issues": internal_issues,
-            "cross_chapter_duplicates": cross_duplicates[:20],  # 限制总数
+            "cross_chapter_duplicates": cross_duplicates[:20],
             "total_issues": len(internal_issues) + len(cross_duplicates),
             "has_issues": len(internal_issues) > 0 or len(cross_duplicates) > 0
+        }
+    
+    async def check_project_stream(
+        self, 
+        project_id: str, 
+        db: AsyncSession, 
+        max_chapters: int = 50
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """流式检测项目章节间重复"""
+        result = await db.execute(
+            select(Chapter).where(
+                Chapter.project_id == project_id,
+                Chapter.content != None,
+                Chapter.content != ""
+            ).order_by(Chapter.chapter_number).limit(max_chapters)
+        )
+        chapters = list(result.scalars().all())
+        
+        if len(chapters) < 2:
+            yield {"type": "error", "message": "需要至少2个已完成章节"}
+            return
+        
+        total = len(chapters)
+        internal_count = 0
+        cross_count = 0
+        
+        # 阶段1: 检测每章内部重复
+        yield {"type": "progress", "phase": "internal", "current": 0, "total": total, "message": "开始检测章节内部重复..."}
+        
+        for i, ch in enumerate(chapters):
+            internal = self.find_duplicates_in_chapter(ch.content)
+            if internal:
+                internal_count += len(internal)
+                yield {
+                    "type": "internal",
+                    "chapter_number": ch.chapter_number,
+                    "chapter_title": ch.title,
+                    "duplicates": internal[:5],
+                    "count": len(internal)
+                }
+            
+            yield {"type": "progress", "phase": "internal", "current": i + 1, "total": total}
+        
+        # 阶段2: 检测章节间重复
+        pairs_total = total * (total - 1) // 2
+        yield {"type": "progress", "phase": "cross", "current": 0, "total": pairs_total, "message": "开始检测章节间重复..."}
+        
+        pair_count = 0
+        for i, ch1 in enumerate(chapters):
+            for j, ch2 in enumerate(chapters):
+                if i >= j:
+                    continue
+                
+                pair_count += 1
+                cross = self.find_duplicates_between_chapters(
+                    ch1.content, ch2.content,
+                    {"number": ch1.chapter_number, "title": ch1.title},
+                    {"number": ch2.chapter_number, "title": ch2.title}
+                )
+                
+                if cross:
+                    cross_count += len(cross)
+                    yield {
+                        "type": "cross",
+                        "chapter1": {"number": ch1.chapter_number, "title": ch1.title},
+                        "chapter2": {"number": ch2.chapter_number, "title": ch2.title},
+                        "duplicates": cross[:3],
+                        "count": len(cross)
+                    }
+                
+                if pair_count % 10 == 0:
+                    yield {"type": "progress", "phase": "cross", "current": pair_count, "total": pairs_total}
+        
+        # 完成
+        yield {
+            "type": "complete",
+            "project_id": project_id,
+            "chapters_checked": total,
+            "internal_issues_count": internal_count,
+            "cross_issues_count": cross_count,
+            "total_issues": internal_count + cross_count,
+            "has_issues": internal_count > 0 or cross_count > 0
         }
